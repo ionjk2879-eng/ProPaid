@@ -13,6 +13,11 @@ export default function AnalysisResult({ result, saving, saved, onChange, onSave
   const [editing, setEditing] = useState(false);
   const update = <K extends keyof ProposalAnalysis>(key: K, value: ProposalAnalysis[K]) => onChange({ ...result, [key]: value });
   const missing = [...result.risks, ...result.warnings.map((warning) => warning.replace(/^확인 필요:\s*/, ''))]
+    .filter((value) => !(result.revisionCount != null && value.includes('수정 횟수')))
+    .filter((value) => !(result.secondaryUsage && (value.includes('2차 사용') || value.includes('2차 활용'))))
+    .filter((value) => !(result.client && value.includes('거래처')))
+    .filter((value) => !(result.amount != null && value.includes('금액')))
+    .filter((value) => !((result.draftDueDate || result.publishDueDate) && value.includes('날짜')))
     .filter((value, index, values) => value && values.indexOf(value) === index);
 
   return (
