@@ -1,65 +1,81 @@
-import type React from 'react';
+import { useState, type ReactNode } from 'react';
 import type { ProposalAnalysis } from '../../api/proposal';
-import WithholdingBadge from '../WithholdingBadge';
 
 interface AnalysisResultProps {
   result: ProposalAnalysis;
   saving: boolean;
   saved: boolean;
+  onChange: (result: ProposalAnalysis) => void;
   onSave: () => void;
 }
 
-export default function AnalysisResult({ result, saving, saved, onSave }: AnalysisResultProps) {
+export default function AnalysisResult({ result, saving, saved, onChange, onSave }: AnalysisResultProps) {
+  const [editing, setEditing] = useState(false);
+  const update = <K extends keyof ProposalAnalysis>(key: K, value: ProposalAnalysis[K]) => onChange({ ...result, [key]: value });
+  const missing = [...result.risks, ...result.warnings.map((warning) => warning.replace(/^확인 필요:\s*/, ''))]
+    .filter((value, index, values) => value && values.indexOf(value) === index);
+
   return (
-    <section aria-live="polite" className="card card-body" style={{ marginTop: 20 }}>
-      <div className="card-header" style={{ padding: 0, marginBottom: 18 }}><div><p className="eyebrow">ANALYSIS DRAFT</p><h2 className="card-title">분석 결과</h2></div><span className="badge badge-review">확인 필요</span></div>
-      <div className="result-grid">
-        <ResultItem label="거래처" value={result.client ?? '확인 필요'} />
-        <ResultItem label="제안 유형" value={result.dealType ?? '확인 필요'} />
-        <ResultItem label="제안 금액" value={result.amount == null ? '찾지 못함' : `${result.amount.toLocaleString()}원`}>
-          {result.amount != null && <WithholdingBadge amount={result.amount} />}
-        </ResultItem>
-        <ResultItem label="초안 납기" value={result.draftDueDate ?? '확인 필요'} />
-        <ResultItem label="게시 납기" value={result.publishDueDate ?? '확인 필요'} />
-        <ResultItem label="수정 횟수" value={result.revisionCount == null ? '명시되지 않음' : `${result.revisionCount}회`} />
-        <ResultItem label="2차 활용" value={result.secondaryUsage ?? '명시되지 않음'} />
+    <section aria-live="polite" className="card card-body proposal-result-card">
+      <div className="proposal-panel-heading"><div><p className="eyebrow">ANALYSIS DRAFT</p><h2 className="card-title">분석 결과</h2></div><span className="badge badge-review">확인 필요</span></div>
+      <div className="analysis-form">
+        <AnalysisField label="거래처" missing={!result.client}>
+          <input value={result.client ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('client', event.target.value || null)} />
+        </AnalysisField>
+        <AnalysisField label="제안 금액" missing={result.amount == null}>
+          <div className="analysis-input-unit"><input type="number" min="0" value={result.amount ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('amount', event.target.value ? Number(event.target.value) : null)} /><span>원</span></div>
+        </AnalysisField>
+        <AnalysisField label="초안 납기" missing={!result.draftDueDate}>
+          <input type="date" value={result.draftDueDate ?? ''} disabled={!editing} onChange={(event) => update('draftDueDate', event.target.value || null)} />
+        </AnalysisField>
+        <AnalysisField label="게시 납기" missing={!result.publishDueDate}>
+          <input type="date" value={result.publishDueDate ?? ''} disabled={!editing} onChange={(event) => update('publishDueDate', event.target.value || null)} />
+        </AnalysisField>
+        <AnalysisField label="수정 횟수" missing={result.revisionCount == null}>
+          <div className="analysis-input-unit"><input type="number" min="0" value={result.revisionCount ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('revisionCount', event.target.value ? Number(event.target.value) : null)} /><span>{result.revisionCount == null ? '확인 필요' : '회'}</span></div>
+        </AnalysisField>
+        <AnalysisField label="지급 조건" missing={!result.paymentCondition}>
+          <input value={result.paymentCondition ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('paymentCondition', event.target.value || null)} />
+        </AnalysisField>
+        <AnalysisField label="제안 유형" missing={!result.dealType}>
+          <input value={result.dealType ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('dealType', event.target.value || null)} />
+        </AnalysisField>
+        <AnalysisField label="2차 활용" missing={!result.secondaryUsage}>
+          <input value={result.secondaryUsage ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('secondaryUsage', event.target.value || null)} />
+        </AnalysisField>
       </div>
-      <DetailList title="작업 범위" values={result.deliverables} empty="작업물을 찾지 못함" />
-      <div className="result-section"><h3>지급 조건</h3><p>{result.paymentCondition ?? '찾지 못함'}</p></div>
-      <DetailList title="해야 할 일" values={result.tasks} empty="자동 생성된 할 일이 없음" ordered />
-      {result.risks.length > 0 && <DetailList title="원문에서 확인이 필요한 항목" values={result.risks} empty="" warning />}
-      <p className="helper">적용 규칙: {result.matchedRules.join(', ') || '없음'}</p>
-      {result.warnings.length > 0 && (
-        <div className="alert alert-warning">
-          {result.warnings.map((warning) => <div key={warning}>확인 필요: {warning}</div>)}
-        </div>
-      )}
-      <div className="alert alert-info" style={{ marginTop: 12, marginBottom: 0 }}>
-        메일 원문 기준 정보 표시이며 법률·계약 자문이 아닙니다. 계약 전 원문을 직접 확인하고 필요 시 전문가와 상담하세요.
+
+      {missing.length > 0 && <div className="analysis-missing"><h3>⚠ 누락된 조건</h3>{missing.map((item) => <div key={item}>• {item}</div>)}</div>}
+
+      <div className="analysis-detail-grid">
+        <EditableList title="작업 범위" values={result.deliverables} editing={editing} empty="작업물을 찾지 못함" onChange={(values) => update('deliverables', values)} />
+        <EditableList title="해야 할 일" values={result.tasks} editing={editing} empty="자동 생성된 할 일이 없음" onChange={(values) => update('tasks', values)} />
       </div>
-      <div className="action-row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
+
+      <div className="proposal-result-actions">
+        <button className="btn btn-secondary" type="button" onClick={() => setEditing((value) => !value)}>{editing ? '수정 완료' : '결과 수정'}</button>
         <button className="btn btn-primary" onClick={onSave} disabled={saving || saved}>{saved ? '✓ 거래로 저장됨' : saving ? '저장 중…' : '확인 후 거래로 저장'}</button>
       </div>
     </section>
   );
 }
 
-function DetailList({ title, values, empty, ordered = false, warning = false }: { title: string; values: string[]; empty: string; ordered?: boolean; warning?: boolean }) {
-  const List = ordered ? 'ol' : 'ul';
+function AnalysisField({ label, missing = false, children }: { label: string; missing?: boolean; children: ReactNode }) {
   return (
-    <div className={`result-section${warning ? ' alert alert-warning' : ''}`}>
-      <h3>{title}</h3>
-      {values.length ? <List>{values.map((value) => <li key={value}>{value}</li>)}</List> : <p>{empty}</p>}
-    </div>
+    <label className={`analysis-field${missing ? ' analysis-field-missing' : ''}`}>
+      <span className="analysis-field-label">{label}</span>
+      <span className="analysis-field-control">{children}</span>
+      {missing && <span className="analysis-required-badge">확인 필요</span>}
+    </label>
   );
 }
 
-function ResultItem({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
+function EditableList({ title, values, editing, empty, onChange }: { title: string; values: string[]; editing: boolean; empty: string; onChange: (values: string[]) => void }) {
   return (
-    <div className="result-item">
-      <div className="result-label">{label}</div>
-      <strong>{value}</strong>
-      {children}
+    <div className="analysis-detail">
+      <h3>{title}</h3>
+      {editing ? <textarea value={values.join('\n')} placeholder="한 줄에 하나씩 입력하세요" onChange={(event) => onChange(event.target.value.split('\n').map((value) => value.trim()).filter(Boolean))} />
+        : values.length ? <ul>{values.map((value) => <li key={value}>{value}</li>)}</ul> : <p>{empty}</p>}
     </div>
   );
 }

@@ -186,6 +186,36 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .editor { min-height: 310px; resize: vertical; line-height: 1.7; }
 .editor-footer { margin-top: 10px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.proposal-workspace { display: grid; gap: 18px; }
+.proposal-workspace-result { grid-template-columns: minmax(0, .95fr) minmax(480px, 1.2fr); align-items: start; }
+.proposal-source-card, .proposal-result-card { min-width: 0; }
+.proposal-workspace-result .proposal-source-card { position: sticky; top: 18px; }
+.proposal-panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 16px; }
+.proposal-panel-heading .eyebrow { margin-bottom: 5px; }
+.proposal-source-card > .alert { margin: 0 0 14px; }
+.proposal-workspace-result .editor { min-height: 430px; }
+.analysis-form { display: grid; gap: 8px; }
+.analysis-field { position: relative; display: grid; grid-template-columns: 108px minmax(0, 1fr); min-height: 46px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: white; transition: border-color .15s, box-shadow .15s; }
+.analysis-field:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.analysis-field-missing { border-color: #efb34f; background: #fffdfa; }
+.analysis-field-label { display: flex; align-items: center; padding: 0 13px; border-right: 1px solid var(--border); background: #f8f9fc; color: var(--navy); font-size: 12px; font-weight: 800; }
+.analysis-field-control { min-width: 0; display: flex; align-items: stretch; }
+.analysis-field input { width: 100%; min-width: 0; border: 0; border-radius: 0; padding: 10px 13px; background: transparent; box-shadow: none; font-weight: 650; }
+.analysis-field input:focus { box-shadow: none; }
+.analysis-field input:disabled { color: var(--navy); opacity: 1; cursor: default; }
+.analysis-input-unit { width: 100%; display: flex; align-items: center; }
+.analysis-input-unit span { flex: 0 0 auto; padding-right: 13px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.analysis-required-badge { position: absolute; right: 10px; top: 50%; translate: 0 -50%; padding: 4px 7px; border-radius: 6px; color: #9b5b00; background: #fff0cc; font-size: 10px; font-weight: 800; pointer-events: none; }
+.analysis-field-missing .analysis-field-control { padding-right: 82px; }
+.analysis-missing { margin-top: 14px; padding: 14px 16px; border: 1px solid #efb34f; border-radius: 11px; color: #8a4b06; background: #fffaf0; font-size: 12px; line-height: 1.7; }
+.analysis-missing h3 { margin: 0 0 5px; font-size: 13px; }
+.analysis-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.analysis-detail { padding: 13px 14px; border: 1px solid #edf0f4; border-radius: 10px; background: #fafbfc; }
+.analysis-detail h3 { margin: 0 0 7px; font-size: 12px; }
+.analysis-detail p, .analysis-detail li { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.analysis-detail ul { margin: 0; padding-left: 17px; }
+.analysis-detail textarea { min-height: 88px; font-size: 12px; line-height: 1.5; resize: vertical; }
+.proposal-result-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
 .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .result-item { padding: 14px; border: 1px solid #edf0f4; border-radius: 11px; background: #fafbfc; }
 .result-label { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
@@ -253,6 +283,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .content { padding-inline: 15px; }
   .page-header, .deal-top, .deal-footer, .editor-footer, .integration-card { align-items: stretch; flex-direction: column; }
   .grid-2, .grid-3, .form-grid, .chart-grid, .message-analysis { grid-template-columns: 1fr; }
+  .proposal-workspace-result { grid-template-columns: 1fr; }
+  .proposal-workspace-result .proposal-source-card { position: static; }
   .chart-card-wide { grid-column: auto; }
   .form-grid-wide, .report-grid { grid-template-columns: 1fr; }
   .finance-metrics, .expense-form-grid { grid-template-columns: 1fr; }

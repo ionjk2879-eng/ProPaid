@@ -43,12 +43,23 @@ export default function ProposalPage() {
     finally { setSaving(false); }
   };
 
+  const handleResultChange = (next: ProposalAnalysis) => {
+    setResult(next);
+    setSaved(false);
+  };
+
   return (
     <>
       <header className="page-header"><div><p className="eyebrow">MANUAL ANALYSIS</p><h1 className="page-title">제안 직접 분석</h1><p className="page-description">메일이나 메신저로 받은 내용을 붙여넣으면 거래 조건, 일정, 확인할 위험을 구조화합니다.</p></div></header>
-      <section className="card card-body"><div className="alert alert-info" style={{ marginTop: 0 }}>원문에 없는 조건은 임의로 채우지 않습니다. 분석 후 반드시 원문과 결과를 함께 확인해주세요.</div><ProposalEditor text={text} loading={loading} onTextChange={setText} onLoadExample={() => setText(example)} onSubmit={handleSubmit} /></section>
       {error && <div className="alert alert-error">{error}</div>}
-      {result && <AnalysisResult result={result} saving={saving} saved={saved} onSave={handleSave} />}
+      <div className={`proposal-workspace${result ? ' proposal-workspace-result' : ''}`}>
+        <section className="card card-body proposal-source-card">
+          <div className="proposal-panel-heading"><div><p className="eyebrow">SOURCE</p><h2 className="card-title">메일 원문</h2></div>{result && <span className="badge badge-confirmed">분석 완료</span>}</div>
+          <div className="alert alert-info">원문에 없는 조건은 임의로 채우지 않습니다. 분석 결과는 메일 원문 기준 정보 표시이며 법률·계약 자문이 아닙니다. 계약 전 원문을 직접 확인하세요.</div>
+          <ProposalEditor text={text} loading={loading} onTextChange={setText} onLoadExample={() => setText(example)} onSubmit={handleSubmit} />
+        </section>
+        {result && <AnalysisResult result={result} saving={saving} saved={saved} onChange={handleResultChange} onSave={handleSave} />}
+      </div>
     </>
   );
 }
