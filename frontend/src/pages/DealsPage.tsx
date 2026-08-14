@@ -201,7 +201,7 @@ export default function DealsPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-info">{notice}</div>}
       {!deals.length && <div className="empty-state"><div className="empty-icon">▦</div><h3>아직 저장된 거래가 없어요</h3><p>받은 메일을 확인하거나 제안 원문을 직접 분석해 첫 거래를 만들어보세요.</p><Link className="btn btn-primary" style={{ marginTop: 18 }} to="/inbox">받은 제안 보기</Link></div>}
-      {view === 'pipeline' && deals.length > 0 && (
+      {view === 'pipeline' && (
         <section className="pipeline-board">
           <div className="pipeline-board-heading"><div><p className="eyebrow">LIVE PIPELINE</p><h2 className="card-title">거래 진행 상황</h2></div><p>카드를 열어 세부 기능을 사용하거나 버튼으로 다음 단계로 이동하세요.</p></div>
           <div className="pipeline">
