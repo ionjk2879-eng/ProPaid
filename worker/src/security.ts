@@ -22,19 +22,6 @@ export async function hashPassword(password: string): Promise<string> {
   return `pbkdf2_sha256$100000$${base64Url(salt)}$${base64Url(new Uint8Array(bits))}`;
 }
 
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [algorithm, iterations, saltValue, hashValue] = stored.split('$');
-  if (algorithm !== 'pbkdf2_sha256' || !iterations || !saltValue || !hashValue) return false;
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: decodeBase64Url(saltValue), iterations: Number(iterations) }, key, 256);
-  const actual = new Uint8Array(bits);
-  const expected = decodeBase64Url(hashValue);
-  if (actual.length !== expected.length) return false;
-  let difference = 0;
-  for (let i = 0; i < actual.length; i++) difference |= actual[i] ^ expected[i];
-  return difference === 0;
-}
-
 async function jwtKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }

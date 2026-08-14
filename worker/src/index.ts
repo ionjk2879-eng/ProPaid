@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { analyzeProposal, type ProposalAnalysis } from './analyze';
 import { analyzeWithAdapter } from './llm';
 import { body, dealResponse, expenseResponse, getUser, subscriptionResponse, type AppContext } from './helpers';
-import { createToken, hashPassword, randomToken, verifyPassword, verifyToken } from './security';
+import { createToken, hashPassword, randomToken, verifyToken } from './security';
 import { createNotionState, decryptNotionToken, encryptNotionToken, notionAppOrigin, notionHeaders, notionRedirectUri, verifyNotionState } from './notion';
 import { createGoogleLoginState, createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleLoginRedirectUri, googleRedirectUri, verifyGoogleLoginState, verifyGoogleState, type GoogleConnection } from './google';
 import type { Env, UserRow, Variables } from './types';
@@ -346,34 +346,6 @@ app.post('/api/deals/:id/calendar', async (c) => {
   if (deal.payment_due_date) { await createEvent(deal.payment_due_date, `[${clientName}] 입금 예정`, '2'); count++; }
   await c.env.DB.prepare('UPDATE deals SET calendar_synced_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').bind(dealId, user.id).run();
   return c.json({ count });
-});
-
-app.post('/api/auth/signup', async (c) => {
-  const input = await body<{ email?: string; password?: string; nickname?: string }>(c as AppContext);
-  const email = input.email?.trim().toLowerCase();
-  const nickname = input.nickname?.trim();
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) return c.json({ message: '올바른 이메일을 입력해주세요.' }, 400);
-  if (!input.password || input.password.length < 8) return c.json({ message: '비밀번호는 8자 이상이어야 합니다.' }, 400);
-  if (!nickname) return c.json({ message: '닉네임을 입력해주세요.' }, 400);
-  const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
-  if (existing) return c.json({ message: '이미 가입된 이메일입니다.' }, 409);
-  const result = await c.env.DB.prepare(
-    'INSERT INTO users (email, password_hash, nickname, inbox_token) VALUES (?, ?, ?, ?)'
-  ).bind(email, await hashPassword(input.password), nickname, randomToken()).run();
-  const userId = Number(result.meta.last_row_id);
-  await c.env.DB.prepare('INSERT INTO user_plans (user_id) VALUES (?)').bind(userId).run();
-  return c.json({ accessToken: await createToken(userId, c.env.JWT_SECRET), nickname });
-});
-
-app.post('/api/auth/login', async (c) => {
-  const input = await body<{ email?: string; password?: string }>(c as AppContext);
-  const row = await c.env.DB.prepare(
-    'SELECT id, nickname, password_hash FROM users WHERE email = ?'
-  ).bind(input.email?.trim().toLowerCase()).first<{ id: number; nickname: string; password_hash: string }>();
-  if (!row || !input.password || !await verifyPassword(input.password, row.password_hash)) {
-    return c.json({ message: '이메일 또는 비밀번호가 올바르지 않습니다.' }, 400);
-  }
-  return c.json({ accessToken: await createToken(row.id, c.env.JWT_SECRET), nickname: row.nickname });
 });
 
 app.get('/api/subscriptions', async (c) => {

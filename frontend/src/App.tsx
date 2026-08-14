@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import ProposalPage from './pages/ProposalPage';
 import DealsPage from './pages/DealsPage';
@@ -21,7 +20,6 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
           <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
           <Route element={<RequireAuth><AppShell /></RequireAuth>}>
             <Route path="/inbox" element={<InboxPage />} />

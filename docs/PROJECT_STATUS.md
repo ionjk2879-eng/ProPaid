@@ -12,7 +12,7 @@ Cloudflare Workers + D1 기반 핵심 흐름과 선택적 Claude 분석을 운�
 
 - Cloudflare Workers / TypeScript / Hono 백엔드
 - React 18 / TypeScript / Vite 프론트엔드
-- JWT 회원가입·로그인과 Google OpenID Connect 로그인
+- Google OpenID Connect 전용 가입·로그인
 - Cloudflare D1 데이터베이스와 마이그레이션
 - 구독 비용 CRUD, 분류 추천, 요약 차트
 - CSV 리포트(PDF 리포트는 Workers 전환 중 일시 중단)
@@ -83,6 +83,7 @@ Resend 단계는 다음 조건을 만족하면 완료로 본다.
 - 정식 제품명은 `Propaid(프로페이드)`이며 슬로건은 `제안부터 입금까지, 놓치지 않게`로 한다.
 - Google 로그인은 `openid email profile` 최소 권한만 요청하고, Calendar 권한 연결과 별도 흐름으로 유지한다.
 - Google의 검증된 이메일이 기존 사용자 이메일과 같으면 해당 계정에 Google 고유 ID를 연결하고, 없으면 무료 계정을 생성한다.
+- 신규 인증은 Google 로그인만 제공하며 이메일·비밀번호 회원가입과 로그인은 운영하지 않는다.
 - 기존 Pinpoint를 별도 협찬 메일 서비스와 분리하지 않고 Propaid으로 확장한다.
 - 1인 개발자의 초기 운영비를 최소화하기 위해 운영 런타임을 Cloudflare Workers + D1으로 전환한다.
 - 기존 Spring Boot 코드는 전환 검증과 데이터 참고가 끝날 때까지 `backend/`에 보존한다.

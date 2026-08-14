@@ -18,8 +18,3 @@ export interface SubscriptionInput {
   usageType: UsageType;
   accountingCategory?: string;
 }
-
-export interface AuthResponse {
-  accessToken: string;
-  nickname: string;
-}
