@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchInboxAddress, fetchInboxMessages, retryInboxMessage, saveInboxMessage, updateInboxAnalysis, type InboxMessage } from '../api/inbox';
 import type { ProposalAnalysis } from '../api/proposal';
+import WithholdingBadge from '../components/WithholdingBadge';
 
 const splitLines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 
@@ -86,7 +87,7 @@ export default function InboxPage() {
           <input className="address-input" value={address} readOnly aria-label="내 Propaid 전달 주소" />
           <button className="btn btn-primary" onClick={copyAddress} disabled={!address}>{copied ? '✓ 복사됨' : '주소 복사'}</button>
         </div>
-        <div className="alert alert-info" style={{ marginBottom: 0 }}>메일이 도착하면 거래로 자동 확정하지 않고 아래의 확인 대기 목록에 저장합니다.</div>
+        <div className="alert alert-info" style={{ marginBottom: 0 }}>메일이 도착하면 거래로 자동 확정하지 않고 아래의 확인 대기 목록에 저장합니다. 분석 결과는 메일 원문 기준 정보 표시이며 법률·계약 자문이 아닙니다.</div>
       </section>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -113,7 +114,7 @@ export default function InboxPage() {
                 <label className="field"><span className="field-label">위험·확인 항목</span><textarea rows={4} maxLength={5000} value={draft.risks.join('\n')} onChange={(event) => updateDraft('risks', splitLines(event.target.value))} placeholder="한 줄에 하나씩 입력하세요" /></label>
               </div><div className="action-row" style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={() => void saveDraft()} disabled={savingId === message.id}>수정 저장</button><button className="btn btn-secondary" onClick={() => { setEditingId(null); setDraft(null); }}>취소</button></div></div>
             ) : (
-              <><div className="message-analysis"><div className="analysis-value"><small>거래처</small><strong>{message.analysis.client || '확인 필요'}</strong></div><div className="analysis-value"><small>제안 금액</small><strong>{message.analysis.amount == null ? '확인 필요' : `${message.analysis.amount.toLocaleString()}원`}</strong></div></div>{!!message.analysis.risks.length && <div className="alert alert-warning">확인 항목 · {message.analysis.risks.join(' · ')}</div>}</>
+              <><div className="message-analysis"><div className="analysis-value"><small>거래처</small><strong>{message.analysis.client || '확인 필요'}</strong></div><div className="analysis-value"><small>제안 금액</small><strong>{message.analysis.amount == null ? '확인 필요' : `${message.analysis.amount.toLocaleString()}원`}</strong>{message.analysis.amount != null && <WithholdingBadge amount={message.analysis.amount} />}</div></div>{!!message.analysis.risks.length && <div className="alert alert-warning">확인 항목 · {message.analysis.risks.join(' · ')}</div>}</>
             )}
             {message.status === 'FAILED' ? <div className="action-row"><button className="btn btn-primary" onClick={() => void retry(message.id)} disabled={savingId === message.id}>{savingId === message.id ? '재처리 중…' : '메일 재처리'}</button></div> : <div className="action-row">
               <button className="btn btn-secondary" onClick={() => startEditing(message)} disabled={message.status === 'SAVED' || editingId === message.id}>분석 수정</button>

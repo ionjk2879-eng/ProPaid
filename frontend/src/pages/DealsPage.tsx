@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import WithholdingBadge from '../components/WithholdingBadge';
 import { Link } from 'react-router-dom';
 import { deleteDeal, fetchDeals, updateDeal, updateDealStatus, type Deal, type DealDetailsInput, type DealStatus } from '../api/deals';
 import { connectNotion, disconnectNotion, exportDealToNotion, fetchNotionStatus, setupNotionWorkspace, type NotionStatus } from '../api/notion';
@@ -162,7 +163,12 @@ export default function DealsPage() {
                 : dealsByStatus[status].map((deal) => (
                   <div key={deal.id} className={`pipeline-card${expandedPipelineId === deal.id ? ' pipeline-card-expanded' : ''}`} onClick={() => setExpandedPipelineId(expandedPipelineId === deal.id ? null : deal.id)}>
                     <div className="pipeline-card-client">{deal.client ?? '거래처 확인 필요'}</div>
-                    {deal.amount != null && <div className="pipeline-card-amount">{deal.amount.toLocaleString()}원</div>}
+                    {deal.amount != null && (
+                      <div className="pipeline-card-amount">
+                        {deal.amount.toLocaleString()}원
+                        <WithholdingBadge amount={deal.amount} />
+                      </div>
+                    )}
                     {deal.dealType && <span className="pipeline-card-type">{deal.dealType}</span>}
                     {deal.publishDueDate && <div className="pipeline-card-date">게시 <strong>{deal.publishDueDate}</strong></div>}
                     {deal.paymentDueDate && <div className="pipeline-card-date">입금 <strong>{deal.paymentDueDate}</strong></div>}
@@ -186,7 +192,7 @@ export default function DealsPage() {
       )}
       <div className="stack" style={{ display: view === 'list' ? 'grid' : 'none' }}>
         {deals.map((deal) => <article key={deal.id} className="card deal-card">
-          <div className="deal-top"><div><div className="deal-client">{deal.client ?? '거래처 확인 필요'}</div><div className="deal-type">{deal.dealType ?? '거래 유형 미정'}</div></div><div className="deal-amount">{deal.amount == null ? '금액 확인 필요' : `${deal.amount.toLocaleString()}원`}</div></div>
+          <div className="deal-top"><div><div className="deal-client">{deal.client ?? '거래처 확인 필요'}</div><div className="deal-type">{deal.dealType ?? '거래 유형 미정'}</div></div><div className="deal-amount">{deal.amount == null ? '금액 확인 필요' : <>{deal.amount.toLocaleString()}원{<WithholdingBadge amount={deal.amount} />}</>}</div></div>
           <div className="deal-deliverables">{deal.deliverables.length ? deal.deliverables.map((item) => <span className="tag" key={item}>{item}</span>) : <span className="tag">작업 범위 확인 필요</span>}</div>
           <div className="deal-meta"><div><span className="meta-label">초안 기한</span><span className="meta-value">{deal.draftDueDate ?? '-'}</span></div><div><span className="meta-label">게시 기한</span><span className="meta-value">{deal.publishDueDate ?? '-'}</span></div><div><span className="meta-label">입금 예정일</span><span className="meta-value">{deal.paymentDueDate ?? '-'}</span></div><div><span className="meta-label">{deal.status === 'PAID' ? '입금 완료일' : '지급 조건'}</span><span className="meta-value">{deal.status === 'PAID' && deal.paidAt ? deal.paidAt.slice(0, 10) : deal.paymentCondition ?? '-'}</span></div></div>
           {editingId === deal.id && draft && <div className="edit-panel" style={{ margin: '18px -22px 0' }}>
