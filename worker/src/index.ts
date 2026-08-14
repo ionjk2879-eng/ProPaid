@@ -5,7 +5,7 @@ import { analyzeWithAdapter } from './llm';
 import { body, dealResponse, expenseResponse, getUser, subscriptionResponse, type AppContext } from './helpers';
 import { createToken, hashPassword, randomToken, verifyPassword, verifyToken } from './security';
 import { createNotionState, decryptNotionToken, encryptNotionToken, notionAppOrigin, notionHeaders, notionRedirectUri, verifyNotionState } from './notion';
-import { createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleRedirectUri, verifyGoogleState, type GoogleConnection } from './google';
+import { createGoogleLoginState, createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleLoginRedirectUri, googleRedirectUri, verifyGoogleLoginState, verifyGoogleState, type GoogleConnection } from './google';
 import type { Env, UserRow, Variables } from './types';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -36,6 +36,82 @@ app.onError((error, c) => {
 });
 
 app.get('/api/health', (c) => c.json({ status: 'ok', runtime: 'cloudflare-workers' }));
+
+app.get('/api/auth/google', async (c) => {
+  if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
+    return c.json({ message: 'Google 로그인 설정이 아직 등록되지 않았습니다.' }, 503);
+  }
+  const query = new URLSearchParams({
+    client_id: c.env.GOOGLE_CLIENT_ID,
+    redirect_uri: googleLoginRedirectUri(c.env),
+    response_type: 'code',
+    scope: 'openid email profile',
+    prompt: 'select_account',
+    state: await createGoogleLoginState(c.env.JWT_SECRET),
+  });
+  return c.json({ authorizationUrl: `https://accounts.google.com/o/oauth2/v2/auth?${query}` });
+});
+
+app.get('/api/auth/google/callback', async (c) => {
+  const origin = googleAppOrigin(c.env);
+  const loginError = (reason: string) => c.redirect(`${origin}/auth/google/callback?error=${reason}`);
+  if (c.req.query('error')) return loginError('denied');
+  if (!await verifyGoogleLoginState(c.req.query('state') ?? '', c.env.JWT_SECRET)) return loginError('invalid_state');
+  const code = c.req.query('code');
+  if (!code || !c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) return loginError('not_configured');
+  try {
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: c.env.GOOGLE_CLIENT_ID,
+        client_secret: c.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: googleLoginRedirectUri(c.env),
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tokens = await tokenResponse.json<{ access_token?: string; error_description?: string }>();
+    if (!tokenResponse.ok || !tokens.access_token) throw new Error(tokens.error_description || 'Google 토큰 교환에 실패했습니다.');
+    const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    const profile = await profileResponse.json<{ sub?: string; email?: string; email_verified?: boolean; name?: string }>();
+    const email = profile.email?.trim().toLowerCase();
+    if (!profileResponse.ok || !profile.sub || !email || profile.email_verified !== true) {
+      throw new Error('검증된 Google 이메일을 확인하지 못했습니다.');
+    }
+
+    let user = await c.env.DB.prepare(`SELECT u.id, u.nickname FROM auth_identities i
+      JOIN users u ON u.id = i.user_id WHERE i.provider = 'google' AND i.provider_user_id = ?`)
+      .bind(profile.sub).first<{ id: number; nickname: string }>();
+    if (!user) {
+      user = await c.env.DB.prepare('SELECT id, nickname FROM users WHERE email = ?')
+        .bind(email).first<{ id: number; nickname: string }>();
+      if (!user) {
+        const nickname = profile.name?.trim().slice(0, 40) || email.split('@')[0];
+        const result = await c.env.DB.prepare(
+          'INSERT INTO users (email, password_hash, nickname, inbox_token) VALUES (?, ?, ?, ?)'
+        ).bind(email, await hashPassword(randomToken(32)), nickname, randomToken()).run();
+        user = { id: Number(result.meta.last_row_id), nickname };
+        await c.env.DB.prepare('INSERT INTO user_plans (user_id) VALUES (?)').bind(user.id).run();
+      }
+      await c.env.DB.prepare(`INSERT INTO auth_identities (user_id, provider, provider_user_id, provider_email)
+        VALUES (?, 'google', ?, ?) ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+        provider_email = excluded.provider_email, updated_at = CURRENT_TIMESTAMP`)
+        .bind(user.id, profile.sub, email).run();
+    } else {
+      await c.env.DB.prepare(`UPDATE auth_identities SET provider_email = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE provider = 'google' AND provider_user_id = ?`).bind(email, profile.sub).run();
+    }
+
+    const accessToken = await createToken(user.id, c.env.JWT_SECRET);
+    return c.redirect(`${origin}/auth/google/callback#access_token=${encodeURIComponent(accessToken)}&nickname=${encodeURIComponent(user.nickname)}`);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : 'Google 로그인 처리 실패');
+    return loginError('error');
+  }
+});
 
 app.get('/api/integrations/notion/status', async (c) => {
   const row = await c.env.DB.prepare('SELECT workspace_id, workspace_name, root_page_id, root_page_url, setup_at, updated_at FROM notion_connections WHERE user_id = ?')

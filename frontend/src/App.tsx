@@ -7,6 +7,7 @@ import ProposalPage from './pages/ProposalPage';
 import DealsPage from './pages/DealsPage';
 import InboxPage from './pages/InboxPage';
 import AppShell from './components/layout/AppShell';
+import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage';
 import type { ReactNode } from 'react';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -21,6 +22,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
           <Route element={<RequireAuth><AppShell /></RequireAuth>}>
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/deals" element={<DealsPage />} />

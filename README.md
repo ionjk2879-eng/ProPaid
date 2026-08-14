@@ -91,6 +91,10 @@ Worker 단독 개발 시 프론트의 `frontend/.env.local`에 `VITE_API_BASE_UR
 | `NOTION_CLIENT_ID` | 없음 | Notion Public OAuth 클라이언트 ID |
 | `NOTION_CLIENT_SECRET` | 없음 | Notion Public OAuth 클라이언트 비밀값 |
 | `NOTION_REDIRECT_URI` | 첫 번째 `APP_ORIGIN` + 콜백 경로 | Notion에 등록한 OAuth 콜백 주소 |
+| `GOOGLE_CLIENT_ID` | 없음 | Google Cloud 웹 애플리케이션 OAuth 클라이언트 ID |
+| `GOOGLE_CLIENT_SECRET` | 없음 | Google OAuth 클라이언트 비밀값 |
+| `GOOGLE_REDIRECT_URI` | 첫 번째 `APP_ORIGIN` + `/api/integrations/google/callback` | Calendar 연결 콜백 주소 |
+| `GOOGLE_LOGIN_REDIRECT_URI` | 첫 번째 `APP_ORIGIN` + `/api/auth/google/callback` | Google 로그인 콜백 주소 |
 | `RESEND_RECEIVING_DOMAIN` | `zenuuxdoeu.resend.app` | 사용자별 전달 주소의 수신 도메인 |
 | `APP_ORIGIN` | `http://localhost:5173` | 허용할 프론트엔드 Origin, 쉼표로 복수 지정 가능 |
 | `VITE_API_BASE_URL` | `/api` | 프론트의 API 기본 주소 |

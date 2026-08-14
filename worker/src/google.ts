@@ -22,6 +22,22 @@ export async function verifyGoogleState(state: string, secret: string) {
   } catch { return null; }
 }
 
+export async function createGoogleLoginState(secret: string) {
+  const payload = encode(new TextEncoder().encode(JSON.stringify({
+    purpose: 'login', expiresAt: Date.now() + 10 * 60_000, nonce: crypto.randomUUID(),
+  })));
+  return `${payload}.${await hmac(secret, payload)}`;
+}
+
+export async function verifyGoogleLoginState(state: string, secret: string) {
+  const [payload, signature] = state.split('.');
+  if (!payload || !signature || (await hmac(secret, payload)) !== signature) return false;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(decode(payload))) as { purpose?: string; expiresAt?: number };
+    return parsed.purpose === 'login' && Boolean(parsed.expiresAt && parsed.expiresAt > Date.now());
+  } catch { return false; }
+}
+
 async function encryptionKey(secret: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`propaid:google:${secret}`));
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
@@ -42,6 +58,10 @@ export async function decryptGoogleToken(value: string, secret: string) {
 
 export function googleRedirectUri(env: Env) {
   return env.GOOGLE_REDIRECT_URI || `${env.APP_ORIGIN.split(',')[0].trim()}/api/integrations/google/callback`;
+}
+
+export function googleLoginRedirectUri(env: Env) {
+  return env.GOOGLE_LOGIN_REDIRECT_URI || `${env.APP_ORIGIN.split(',')[0].trim().replace(/\/$/, '')}/api/auth/google/callback`;
 }
 
 export function googleAppOrigin(env: Env) {
