@@ -41,6 +41,6 @@ export async function fetchFinanceSummary() { return (await apiClient.get<Financ
 export async function downloadFinanceCsv() {
   const response = await apiClient.get('/reports/finance/csv', { responseType: 'blob' });
   const url = URL.createObjectURL(response.data);
-  const link = document.createElement('a'); link.href = url; link.download = 'duepick-finance-report.csv'; link.click();
+  const link = document.createElement('a'); link.href = url; link.download = 'propaid-finance-report.csv'; link.click();
   URL.revokeObjectURL(url);
 }

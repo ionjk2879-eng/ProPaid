@@ -23,7 +23,7 @@ export async function verifyGoogleState(state: string, secret: string) {
 }
 
 async function encryptionKey(secret: string) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`duepick:google:${secret}`));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`propaid:google:${secret}`));
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 

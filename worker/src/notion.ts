@@ -24,7 +24,7 @@ export async function verifyNotionState(state: string, secret: string) {
 }
 
 async function encryptionKey(secret: string) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`duepick:notion:${secret}`));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`propaid:notion:${secret}`));
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 

@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "duepick-api",
+  "name": "propaid-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-03",
   "observability": { "enabled": true },
@@ -10,13 +10,13 @@
     "run_worker_first": ["/api/*"]
   },
   "vars": {
-    "APP_ORIGIN": "https://duepick-api.ionjk2879.workers.dev,http://localhost:5173,http://localhost:8787",
+    "APP_ORIGIN": "https://propaid-api.ionjk2879.workers.dev,http://localhost:5173,http://localhost:8787",
     "RESEND_RECEIVING_DOMAIN": "zenuuxdoeu.resend.app"
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "duepick",
+      "database_name": "propaid",
       "database_id": "f1a8bfb8-b597-4cb2-975f-65a0d52133db",
       "migrations_dir": "migrations"
     }
@@ -24,7 +24,7 @@
   "r2_buckets": [
     {
       "binding": "EVIDENCE_BUCKET",
-      "bucket_name": "duepick-evidence"
+      "bucket_name": "propaid-evidence"
     }
   ]
 }

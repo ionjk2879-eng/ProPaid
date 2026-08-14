@@ -1,6 +1,6 @@
 {
-  "name": "Duepick",
-  "short_name": "Duepick",
+  "name": "Propaid",
+  "short_name": "Propaid",
   "description": "제안부터 입금까지, 놓치지 않게",
   "start_url": "/",
   "display": "standalone",

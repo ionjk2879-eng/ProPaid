@@ -1,5 +1,5 @@
 {
-  "name": "duepick-worker",
+  "name": "propaid-worker",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,8 +7,8 @@
     "build:frontend": "npm --prefix ../frontend ci && npm --prefix ../frontend run build",
     "deploy": "npm run build:frontend && wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "db:local": "wrangler d1 migrations apply duepick --local",
-    "db:remote": "wrangler d1 migrations apply duepick --remote"
+    "db:local": "wrangler d1 migrations apply propaid --local",
+    "db:remote": "wrangler d1 migrations apply propaid --remote"
   },
   "dependencies": {
     "hono": "^4.9.2"

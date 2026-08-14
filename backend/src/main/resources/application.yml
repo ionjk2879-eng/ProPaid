@@ -1,6 +1,6 @@
 spring:
   application:
-    name: duepick
+    name: propaid
 
   # 기본 프로필: PostgreSQL (docker compose up -d 로 로컬에 띄운 컨테이너 사용)
   # H2 인메모리로 돌리려면 --spring.profiles.active=h2 (application-h2.yml 참고)

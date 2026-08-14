@@ -83,7 +83,7 @@ export default function InboxPage() {
       <section className="card card-body" style={{ marginBottom: 22 }}>
         <div className="card-header" style={{ padding: 0, marginBottom: 14 }}><div><h2 className="card-title">내 전용 전달 주소</h2><p className="card-copy">필요한 메일만 이 주소로 전달하세요. 받은편지함 전체 권한은 사용하지 않습니다.</p></div><span className="badge badge-confirmed">활성</span></div>
         <div className="address-box">
-          <input className="address-input" value={address} readOnly aria-label="내 Duepick 전달 주소" />
+          <input className="address-input" value={address} readOnly aria-label="내 Propaid 전달 주소" />
           <button className="btn btn-primary" onClick={copyAddress} disabled={!address}>{copied ? '✓ 복사됨' : '주소 복사'}</button>
         </div>
         <div className="alert alert-info" style={{ marginBottom: 0 }}>메일이 도착하면 거래로 자동 확정하지 않고 아래의 확인 대기 목록에 저장합니다.</div>

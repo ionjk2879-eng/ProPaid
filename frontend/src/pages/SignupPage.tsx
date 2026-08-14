@@ -26,7 +26,7 @@ export default function SignupPage() {
   return (
     <div className="auth-layout">
       <section className="auth-panel"><div className="auth-card">
-        <div className="brand"><span className="brand-mark" />Duepick</div>
+        <div className="brand"><span className="brand-mark" />Propaid</div>
         <h1 className="auth-title">내 업무 흐름 만들기</h1><p className="auth-copy">무료로 시작하고, 중요한 제안과 입금 일정을 한곳에서 관리하세요.</p>
         <form onSubmit={handleSubmit} className="auth-form">
           <label className="field"><span className="field-label">닉네임</span><input type="text" placeholder="어떻게 불러드릴까요?" value={nickname} onChange={(e) => setNickname(e.target.value)} required /></label>

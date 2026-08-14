@@ -140,18 +140,18 @@ app.post('/api/integrations/notion/setup', async (c) => {
   let rootId = connection.root_page_id; let rootUrl = connection.root_page_url; let createdRoot = false;
   if (rootId && !rootUrl) rootUrl = notionPageUrl(rootId);
   if (!rootId) {
-    const existingRoot = (await search('Duepick 홈')).find((item) => plainTitle(item) === 'Duepick 홈');
+    const existingRoot = (await search('Propaid 홈')).find((item) => plainTitle(item) === 'Propaid 홈');
     if (existingRoot) { rootId = String(existingRoot.id); rootUrl = notionPageUrl(rootId); }
   }
   if (!rootId) {
     const root = await request('pages', {
     parent: { type: 'workspace', workspace: true }, icon: { type: 'emoji', emoji: '🎯' },
-    properties: { title: { type: 'title', title: rich('Duepick 홈') } },
+    properties: { title: { type: 'title', title: rich('Propaid 홈') } },
     children: [
       { object: 'block', type: 'heading_1', heading_1: { rich_text: rich('제안부터 입금까지, 놓치지 않게') } },
-      { object: 'block', type: 'callout', callout: { icon: { type: 'emoji', emoji: '👋' }, rich_text: rich('Duepick에서 확인한 거래를 이 공간에 모아 작업과 입금 일정을 관리하세요.') } },
+      { object: 'block', type: 'callout', callout: { icon: { type: 'emoji', emoji: '👋' }, rich_text: rich('Propaid에서 확인한 거래를 이 공간에 모아 작업과 입금 일정을 관리하세요.') } },
       { object: 'block', type: 'heading_2', heading_2: { rich_text: rich('빠른 시작') } },
-      { object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: rich('Duepick에서 제안 메일을 분석하고 내용을 확인합니다.') } },
+      { object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: rich('Propaid에서 제안 메일을 분석하고 내용을 확인합니다.') } },
       { object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: rich('확정된 거래에서 Notion으로 보내기를 누릅니다.') } },
       { object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: rich('아래 거래 관리에서 상태·마감일·입금 예정일을 확인합니다.') } },
       { object: 'block', type: 'divider', divider: {} },
@@ -162,11 +162,11 @@ app.post('/api/integrations/notion/setup', async (c) => {
       .bind(rootId, rootUrl, user.id).run();
   }
   if (createdRoot) await request('pages', { parent: { type: 'page_id', page_id: rootId }, icon: { type: 'emoji', emoji: '📘' },
-    properties: { title: { type: 'title', title: rich('Duepick 사용 방법') } }, children: [
+    properties: { title: { type: 'title', title: rich('Propaid 사용 방법') } }, children: [
       { object: 'block', type: 'heading_2', heading_2: { rich_text: rich('기본 원칙') } },
       { object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: rich('AI 분석 결과는 원문과 비교해 확인한 뒤 저장하세요.') } },
       { object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: rich('명시되지 않은 계약 조건은 추측하지 말고 확인 필요 상태로 유지하세요.') } },
-      { object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: rich('거래 상태와 입금 완료 처리는 Duepick을 기준으로 관리하세요.') } },
+      { object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: rich('거래 상태와 입금 완료 처리는 Propaid를 기준으로 관리하세요.') } },
     ] });
   let databaseId = connection.database_id;
   if (!databaseId) {
@@ -176,7 +176,7 @@ app.post('/api/integrations/notion/setup', async (c) => {
         '거래명': { title: {} }, '거래처': { rich_text: {} }, '유형': { rich_text: {} },
         '상태': { select: { options: [{ name: '확정', color: 'blue' }, { name: '진행 중', color: 'purple' }, { name: '작업 완료', color: 'green' }, { name: '입금 완료', color: 'gray' }] } },
         '금액': { number: { format: 'won' } }, '초안 기한': { date: {} }, '게시 기한': { date: {} }, '입금 예정일': { date: {} },
-        '지급 조건': { rich_text: {} }, '작업물': { rich_text: {} }, '확인 항목': { rich_text: {} }, 'Duepick ID': { number: {} },
+        '지급 조건': { rich_text: {} }, '작업물': { rich_text: {} }, '확인 항목': { rich_text: {} }, 'Propaid ID': { number: {} },
       },
     });
     databaseId = String(database.id);
@@ -255,7 +255,7 @@ app.post('/api/deals/:id/calendar', async (c) => {
       .bind(encrypted, expiry, user.id).run();
   });
   const clientName = deal.client ?? '거래처 미정';
-  const description = `Duepick 거래\n거래처: ${clientName}${deal.deal_type ? `\n유형: ${deal.deal_type}` : ''}${deal.amount != null ? `\n금액: ${deal.amount.toLocaleString()}원` : ''}`;
+  const description = `Propaid 거래\n거래처: ${clientName}${deal.deal_type ? `\n유형: ${deal.deal_type}` : ''}${deal.amount != null ? `\n금액: ${deal.amount.toLocaleString()}원` : ''}`;
   const createEvent = async (date: string, summary: string, colorId: string) => {
     const end = new Date(date); end.setDate(end.getDate() + 1);
     const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
@@ -448,7 +448,7 @@ app.post('/api/deals/:id/notion', async (c) => {
   const connection = await c.env.DB.prepare('SELECT access_token_encrypted, refresh_token_encrypted, database_id FROM notion_connections WHERE user_id = ?')
     .bind(user.id).first<{ access_token_encrypted: string; refresh_token_encrypted: string | null; database_id: string | null }>();
   if (!connection) return c.json({ message: '먼저 Notion을 연결해주세요.' }, 409);
-  if (!connection.database_id) return c.json({ message: '먼저 Duepick Notion 공간을 만들어주세요.' }, 409);
+  if (!connection.database_id) return c.json({ message: '먼저 Propaid Notion 공간을 만들어주세요.' }, 409);
 
   const text = (content: unknown) => [{ type: 'text', text: { content: String(content ?? '').slice(0, 2000) } }];
   const paragraph = (label: string, value: unknown) => ({ object: 'block', type: 'paragraph',
@@ -482,7 +482,7 @@ app.post('/api/deals/:id/notion', async (c) => {
   if (has('지급 조건')) properties['지급 조건'] = { rich_text: text(deal.payment_condition || '') };
   if (has('작업물')) properties['작업물'] = { rich_text: text((JSON.parse(String(deal.deliverables || '[]')) as string[]).join(' · ')) };
   if (has('확인 항목')) properties['확인 항목'] = { rich_text: text((JSON.parse(String(deal.risks || '[]')) as string[]).join(' · ')) };
-  if (has('Duepick ID')) properties['Duepick ID'] = { number: Number(deal.id) };
+  if (has('Propaid ID')) properties['Propaid ID'] = { number: Number(deal.id) };
   const dates = { '초안 기한': dateProperty(deal.draft_due_date), '게시 기한': dateProperty(deal.publish_due_date), '입금 예정일': dateProperty(deal.payment_due_date) };
   Object.entries(dates).forEach(([key, value]) => { if (value && has(key)) properties[key] = value; });
   const pageBody = JSON.stringify({ parent: { database_id: connection.database_id }, properties, children });
@@ -732,7 +732,7 @@ app.get('/api/reports/finance/csv', async (c) => {
   const lines = ['구분,일자,거래처/항목,금액,계정과목,업무사용비율,공제검토,증빙,연결거래,메모'];
   incomes.forEach((row) => lines.push(['수입', row.paid_at, row.client, row.amount, row.deal_type, '100', '', '', '', row.payment_condition].map(escape).join(',')));
   expenses.forEach((row) => lines.push(['비용', row.expense_date, row.title, row.amount, row.category, row.business_ratio, row.deduction_status, row.evidence_type, row.deal_client, row.note].map(escape).join(',')));
-  return new Response(`\uFEFF${lines.join('\r\n')}`, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="duepick-finance-report.csv"' } });
+  return new Response(`\uFEFF${lines.join('\r\n')}`, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="propaid-finance-report.csv"' } });
 });
 
 app.get('/api/reports/subscriptions/pdf', (c) => c.json({ message: 'PDF 보고서는 Cloudflare 전환 후 다시 제공할 예정입니다. CSV를 이용해주세요.' }, 501));
@@ -799,7 +799,7 @@ function stripHtml(html: string): string {
 
 async function receiveEmail(emailId: string, env: Env) {
   const response = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`, {
-    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'User-Agent': 'duepick-worker/1.0' },
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'User-Agent': 'propaid-worker/1.0' },
   });
   if (!response.ok) throw new Error(`Resend 본문 조회 실패 (${response.status})`);
   const email = await response.json<{ text?: string | null; html?: string | null; from?: string; subject?: string }>();

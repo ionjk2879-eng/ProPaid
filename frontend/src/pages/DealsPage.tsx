@@ -58,8 +58,8 @@ export default function DealsPage() {
     try {
       const result = await setupNotionWorkspace();
       setNotion({ ...notion, configured: true, rootPageUrl: result.rootPageUrl });
-      setNotice('Duepick 홈과 거래 관리 데이터베이스를 만들었습니다.');
-    } catch (e) { setError(e instanceof Error ? e.message : 'Duepick Notion 공간을 만들지 못했습니다. 잠시 후 다시 시도해주세요.'); }
+      setNotice('Propaid 홈과 거래 관리 데이터베이스를 만들었습니다.');
+    } catch (e) { setError(e instanceof Error ? e.message : 'Propaid Notion 공간을 만들지 못했습니다. 잠시 후 다시 시도해주세요.'); }
     finally { setNotionBusy(null); }
   };
 
@@ -141,7 +141,7 @@ export default function DealsPage() {
       <section className="grid-3" style={{ marginBottom: 24 }}><div className="card metric-card"><div className="metric-label">전체 거래</div><div className="metric-value">{deals.length}건</div><div className="metric-note">확인 대기 포함</div></div><div className="card metric-card"><div className="metric-label">확정 거래 금액</div><div className="metric-value">{total.toLocaleString()}원</div><div className="metric-note">확인 완료된 거래</div></div><div className="card metric-card"><div className="metric-label">입금 완료</div><div className="metric-value">{paid.toLocaleString()}원</div><div className="metric-note">실제 수령 기준</div></div></section>
       <section className="card integration-card">
         <div><p className="eyebrow">NOTION EXPORT</p><h2 className="card-title">Notion 연결</h2><p className="card-copy">사용자가 확인한 거래만 선택해서 개인 Notion 페이지로 내보냅니다.</p></div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>{notion?.connected ? <><a className="badge badge-saved" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>Notion · {notion.workspaceName || '워크스페이스'} 연결됨 ↗</a><div className="action-row">{!notion.configured && <button className="btn btn-primary" onClick={() => void createNotionWorkspace()} disabled={notionBusy !== null}>{notionBusy === 'setup' ? '만드는 중…' : 'Duepick 공간 만들기'}</button>}<a className="btn btn-secondary btn-sm" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer">Notion에서 열기</a><button className="btn btn-secondary btn-sm" onClick={() => void stopNotion()} disabled={notionBusy !== null}>{notionBusy === 'disconnect' ? '해제 중…' : '연결 해제'}</button></div></> : <button className="btn btn-primary" onClick={() => void startNotionConnect()} disabled={notionBusy !== null}>{notionBusy === 'connect' ? '연결 중…' : 'Notion 연결'}</button>}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>{notion?.connected ? <><a className="badge badge-saved" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>Notion · {notion.workspaceName || '워크스페이스'} 연결됨 ↗</a><div className="action-row">{!notion.configured && <button className="btn btn-primary" onClick={() => void createNotionWorkspace()} disabled={notionBusy !== null}>{notionBusy === 'setup' ? '만드는 중…' : 'Propaid 공간 만들기'}</button>}<a className="btn btn-secondary btn-sm" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer">Notion에서 열기</a><button className="btn btn-secondary btn-sm" onClick={() => void stopNotion()} disabled={notionBusy !== null}>{notionBusy === 'disconnect' ? '해제 중…' : '연결 해제'}</button></div></> : <button className="btn btn-primary" onClick={() => void startNotionConnect()} disabled={notionBusy !== null}>{notionBusy === 'connect' ? '연결 중…' : 'Notion 연결'}</button>}</div>
       </section>
       <section className="card integration-card">
         <div><p className="eyebrow">CALENDAR SYNC</p><h2 className="card-title">Google Calendar</h2><p className="card-copy">거래별 초안·게시·입금 예정일을 Google Calendar에 자동으로 등록합니다.</p></div>

@@ -1,3 +1,3 @@
-rootProject.name = "duepick"
+rootProject.name = "propaid"
 
 include("backend")

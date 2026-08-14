@@ -4,8 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DuepickApplication {
+public class PropaidApplication {
     public static void main(String[] args) {
-        SpringApplication.run(DuepickApplication.class, args);
+        SpringApplication.run(PropaidApplication.class, args);
     }
 }

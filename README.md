@@ -1,10 +1,10 @@
-# Duepick
+# Propaid
 
 프리랜서·크리에이터·1인 사업자의 **제안 → 계약 → 작업 → 입금 → 비용 → 실제 수익**을 한곳에서 관리하는 프로젝트입니다.
 
 > 제안부터 입금까지, 놓치지 않게.
 
-운영 사이트: [duepick-api.ionjk2879.workers.dev](https://duepick-api.ionjk2879.workers.dev)
+운영 사이트: [propaid-api.ionjk2879.workers.dev](https://propaid-api.ionjk2879.workers.dev)
 
 ## 제품 구조
 
@@ -40,7 +40,7 @@
 | `PATCH` | `/api/deals/{id}/status` | 거래 상태 변경 |
 | `DELETE` | `/api/deals/{id}` | 거래 삭제 |
 | `POST` | `/api/deals/{id}/notion` | 확인된 거래를 연결된 Notion에 내보내기 |
-| `POST` | `/api/integrations/notion/setup` | Duepick 홈·안내·거래 관리 데이터베이스 자동 구성 |
+| `POST` | `/api/integrations/notion/setup` | Propaid 홈·안내·거래 관리 데이터베이스 자동 구성 |
 
 Notion 연결 토큰은 `JWT_SECRET`에서 파생한 AES-GCM 키로 암호화해 D1에 저장합니다. OAuth 설정이 없어도 거래 관리와 다른 기능은 정상 동작합니다.
 
@@ -95,7 +95,7 @@ Worker 단독 개발 시 프론트의 `frontend/.env.local`에 `VITE_API_BASE_UR
 | `APP_ORIGIN` | `http://localhost:5173` | 허용할 프론트엔드 Origin, 쉼표로 복수 지정 가능 |
 | `VITE_API_BASE_URL` | `/api` | 프론트의 API 기본 주소 |
 
-운영 D1 생성 후 `worker/wrangler.jsonc`의 `database_id`를 실제 ID로 교체합니다. R2에는 `duepick-evidence` 버킷이 필요합니다. 비밀값은 저장소에 커밋하지 않습니다. `ANTHROPIC_API_KEY`가 없거나 AI 호출이 실패하면 규칙 기반 분석기가 계속 동작합니다.
+운영 D1 생성 후 `worker/wrangler.jsonc`의 `database_id`를 실제 ID로 교체합니다. R2에는 `propaid-evidence` 버킷이 필요합니다. 비밀값은 저장소에 커밋하지 않습니다. `ANTHROPIC_API_KEY`가 없거나 AI 호출이 실패하면 규칙 기반 분석기가 계속 동작합니다.
 
 `main` 브랜치에 push하면 Cloudflare Workers Builds가 `worker` 디렉터리를 기준으로 프론트엔드와 Worker를 자동 배포합니다.
 
@@ -117,7 +117,7 @@ Content-Type: application/json
 
 외부 서비스는 핵심 도메인과 분리해 다음 순서로 연결합니다.
 
-1. 운영 Notion에서 Duepick 홈 자동 구성과 거래 관리 데이터베이스 내보내기를 검증
+1. 운영 Notion에서 Propaid 홈 자동 구성과 거래 관리 데이터베이스 내보내기를 검증
 2. Google Calendar에 초안·게시·입금 일정을 생성
 3. Google Sheets 내보내기와 첨부 PDF/OCR 분석 추가
 

@@ -15,7 +15,7 @@ export default function AppShell() {
   const { nickname, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('duepick-sidebar-collapsed') === 'true');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('propaid-sidebar-collapsed') === 'true');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const today = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date());
 
@@ -23,7 +23,7 @@ export default function AppShell() {
 
   const toggleSidebar = () => {
     setSidebarCollapsed((current) => {
-      localStorage.setItem('duepick-sidebar-collapsed', String(!current));
+      localStorage.setItem('propaid-sidebar-collapsed', String(!current));
       return !current;
     });
   };
@@ -33,7 +33,7 @@ export default function AppShell() {
       <button className="sidebar-backdrop" aria-label="메뉴 닫기" onClick={() => setMobileMenuOpen(false)} />
       <aside className="sidebar" aria-label="사이드 메뉴">
         <div className="sidebar-head">
-          <NavLink className="brand" to="/inbox"><span className="brand-mark" /><span className="brand-name">Duepick</span></NavLink>
+          <NavLink className="brand" to="/inbox"><span className="brand-mark" /><span className="brand-name">Propaid</span></NavLink>
           <button className="sidebar-toggle" type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'} title={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}>
             <span aria-hidden="true">{sidebarCollapsed ? '›' : '‹'}</span>
           </button>
@@ -44,13 +44,13 @@ export default function AppShell() {
           {navigation.map((item) => <NavLink key={item.to} to={item.to} title={sidebarCollapsed ? item.label : undefined} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><span className="nav-icon">{item.icon}</span><span className="nav-label">{item.label}</span></NavLink>)}
         </nav>
         <div className="sidebar-user">
-          <div className="user-name">{nickname || 'Duepick 사용자'}</div><div className="user-plan">FREE workspace</div>
+          <div className="user-name">{nickname || 'Propaid 사용자'}</div><div className="user-plan">FREE workspace</div>
           <button className="logout-button" onClick={() => { logout(); navigate('/login'); }}>로그아웃</button>
         </div>
       </aside>
       <div className="app-main">
         <header className="topbar">
-          <div className="topbar-leading"><button className="mobile-menu-toggle" type="button" onClick={() => setMobileMenuOpen(true)} aria-label="메뉴 열기">☰</button><span className="topbar-title">{pageNames[location.pathname] || 'Duepick'}</span></div>
+          <div className="topbar-leading"><button className="mobile-menu-toggle" type="button" onClick={() => setMobileMenuOpen(true)} aria-label="메뉴 열기">☰</button><span className="topbar-title">{pageNames[location.pathname] || 'Propaid'}</span></div>
           <span className="topbar-date">{today}</span>
         </header>
         <div className="content"><Outlet /></div>
