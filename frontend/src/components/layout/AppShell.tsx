@@ -33,7 +33,7 @@ export default function AppShell() {
       <button className="sidebar-backdrop" aria-label="메뉴 닫기" onClick={() => setMobileMenuOpen(false)} />
       <aside className="sidebar" aria-label="사이드 메뉴">
         <div className="sidebar-head">
-          <NavLink className="brand" to="/inbox"><span className="brand-mark" /><span className="brand-name">Propaid</span></NavLink>
+          <NavLink className="brand" to="/inbox"><span className="brand-mark"><img src="/favicon.svg" alt="" /></span><span className="brand-name">Propaid</span></NavLink>
           <button className="sidebar-toggle" type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'} title={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}>
             <span aria-hidden="true">{sidebarCollapsed ? '›' : '‹'}</span>
           </button>

@@ -25,7 +25,7 @@ export default function GoogleAuthCallbackPage() {
   return (
     <div className="auth-callback">
       <div className="auth-callback-card">
-        <div className="brand"><span className="brand-mark" />Propaid</div>
+        <div className="brand"><span className="brand-mark"><img src="/favicon.svg" alt="" /></span>Propaid</div>
         {error ? <><div className="alert alert-error">{error}</div><Link className="btn btn-primary" to="/login">로그인으로 돌아가기</Link></>
           : <p>Google 계정을 확인하고 있습니다…</p>}
       </div>
