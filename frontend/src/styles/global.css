@@ -272,6 +272,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .topbar { height: 62px; padding: 0 20px; }
   .mobile-menu-toggle { display: grid; width: 34px; height: 34px; border-radius: 9px; color: var(--navy); background: var(--primary-soft); font-size: 17px; }
   .content { padding: 26px 20px 42px; }
+  .proposal-workspace-result { grid-template-columns: 1fr; }
+  .proposal-workspace-result .proposal-source-card { position: static; }
+  .proposal-workspace-result .editor { min-height: 300px; }
   .auth-layout { grid-template-columns: 1fr; }
   .auth-visual { display: none; }
   .form-grid-wide, .report-grid { grid-template-columns: repeat(2, 1fr); }

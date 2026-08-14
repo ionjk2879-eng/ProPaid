@@ -37,7 +37,7 @@ export default function AnalysisResult({ result, saving, saved, onChange, onSave
           <input type="date" value={result.publishDueDate ?? ''} disabled={!editing} onChange={(event) => update('publishDueDate', event.target.value || null)} />
         </AnalysisField>
         <AnalysisField label="수정 횟수" missing={result.revisionCount == null}>
-          <div className="analysis-input-unit"><input type="number" min="0" value={result.revisionCount ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('revisionCount', event.target.value ? Number(event.target.value) : null)} /><span>{result.revisionCount == null ? '확인 필요' : '회'}</span></div>
+          <div className="analysis-input-unit"><input type="number" min="0" value={result.revisionCount ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('revisionCount', event.target.value ? Number(event.target.value) : null)} /><span>회</span></div>
         </AnalysisField>
         <AnalysisField label="지급 조건" missing={!result.paymentCondition}>
           <input value={result.paymentCondition ?? ''} placeholder="확인 필요" disabled={!editing} onChange={(event) => update('paymentCondition', event.target.value || null)} />
