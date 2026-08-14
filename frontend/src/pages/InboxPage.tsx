@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { fetchInboxAddress, fetchInboxMessages, retryInboxMessage, saveInboxMessage, updateInboxAnalysis, type InboxMessage } from '../api/inbox';
 import type { ProposalAnalysis } from '../api/proposal';
 import WithholdingBadge from '../components/WithholdingBadge';
@@ -6,6 +7,7 @@ import WithholdingBadge from '../components/WithholdingBadge';
 const splitLines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 
 export default function InboxPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [address, setAddress] = useState('');
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +27,20 @@ export default function InboxPage() {
   };
 
   useEffect(() => { void load(); }, []);
+
+  useEffect(() => {
+    const editId = Number(searchParams.get('edit'));
+    if (!editId) {
+      setEditingId(null);
+      setDraft(null);
+      return;
+    }
+    const message = messages.find((item) => item.id === editId);
+    if (message && editingId !== editId) {
+      setEditingId(editId);
+      setDraft({ ...message.analysis });
+    }
+  }, [searchParams, messages, editingId]);
 
   const copyAddress = async () => {
     await navigator.clipboard.writeText(address);
@@ -55,6 +71,17 @@ export default function InboxPage() {
   const startEditing = (message: InboxMessage) => {
     setEditingId(message.id);
     setDraft({ ...message.analysis });
+    const next = new URLSearchParams(searchParams);
+    next.set('edit', String(message.id));
+    setSearchParams(next);
+  };
+
+  const closeEditing = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('edit');
+    setSearchParams(next, { replace: true });
+    setEditingId(null);
+    setDraft(null);
   };
 
   const updateDraft = <K extends keyof ProposalAnalysis>(key: K, value: ProposalAnalysis[K]) => {
@@ -68,8 +95,7 @@ export default function InboxPage() {
     try {
       const updated = await updateInboxAnalysis(editingId, draft);
       setMessages((items) => items.map((item) => item.id === editingId ? { ...item, analysis: updated } : item));
-      setEditingId(null);
-      setDraft(null);
+      closeEditing();
     } catch {
       setError('분석 초안 수정에 실패했습니다.');
     } finally {
@@ -112,7 +138,7 @@ export default function InboxPage() {
                 <label className="field"><span className="field-label">작업물</span><textarea rows={3} maxLength={5000} value={draft.deliverables.join('\n')} onChange={(event) => updateDraft('deliverables', splitLines(event.target.value))} placeholder="한 줄에 하나씩 입력하세요" /></label>
                 <label className="field"><span className="field-label">작업 체크리스트</span><textarea rows={4} maxLength={5000} value={draft.tasks.join('\n')} onChange={(event) => updateDraft('tasks', splitLines(event.target.value))} placeholder="한 줄에 하나씩 입력하세요" /></label>
                 <label className="field"><span className="field-label">위험·확인 항목</span><textarea rows={4} maxLength={5000} value={draft.risks.join('\n')} onChange={(event) => updateDraft('risks', splitLines(event.target.value))} placeholder="한 줄에 하나씩 입력하세요" /></label>
-              </div><div className="action-row" style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={() => void saveDraft()} disabled={savingId === message.id}>수정 저장</button><button className="btn btn-secondary" onClick={() => { setEditingId(null); setDraft(null); }}>취소</button></div></div>
+              </div><div className="action-row" style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={() => void saveDraft()} disabled={savingId === message.id}>수정 저장</button><button className="btn btn-secondary" onClick={closeEditing}>취소</button></div></div>
             ) : (
               <><div className="message-analysis"><div className="analysis-value"><small>거래처</small><strong>{message.analysis.client || '확인 필요'}</strong></div><div className="analysis-value"><small>제안 금액</small><strong>{message.analysis.amount == null ? '확인 필요' : `${message.analysis.amount.toLocaleString()}원`}</strong>{message.analysis.amount != null && <WithholdingBadge amount={message.analysis.amount} />}</div></div>{!!message.analysis.risks.length && <div className="alert alert-warning">확인 항목 · {message.analysis.risks.join(' · ')}</div>}</>
             )}

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { deleteDeal, fetchDeals, updateDeal, updateDealStatus, type Deal, type DealDetailsInput, type DealStatus } from '../api/deals';
 import { connectNotion, disconnectNotion, exportDealToNotion, fetchNotionStatus, setupNotionWorkspace, type NotionStatus } from '../api/notion';
 import { connectGoogle, disconnectGoogle, fetchGoogleStatus, syncDealToCalendar, type GoogleStatus } from '../api/google';
@@ -13,8 +13,9 @@ const statusLabels: Record<DealStatus, string> = {
 const splitLines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 
 export default function DealsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [view, setView] = useState<'pipeline' | 'list'>('pipeline');
+  const view = searchParams.get('view') === 'list' ? 'list' : 'pipeline';
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<DealDetailsInput | null>(null);
@@ -24,7 +25,7 @@ export default function DealsPage() {
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
   const [googleBusy, setGoogleBusy] = useState<number | 'connect' | 'disconnect' | null>(null);
   const [notice, setNotice] = useState<ReactNode | null>(null);
-  const [expandedPipelineId, setExpandedPipelineId] = useState<number | null>(null);
+  const expandedPipelineId = Number(searchParams.get('deal')) || null;
   const [dunningDeal, setDunningDeal] = useState<Deal | null>(null);
 
   const load = () => fetchDeals().then(setDeals).catch(() => setError('거래 목록을 불러오지 못했습니다.'));
@@ -43,6 +44,29 @@ export default function DealsPage() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    const editId = Number(searchParams.get('edit'));
+    if (!editId) {
+      setEditingId(null);
+      setDraft(null);
+      return;
+    }
+    const deal = deals.find((item) => item.id === editId);
+    if (deal && editingId !== editId) {
+      setEditingId(editId);
+      setDraft({ client: deal.client, dealType: deal.dealType, amount: deal.amount, deliverables: [...deal.deliverables],
+        draftDueDate: deal.draftDueDate, publishDueDate: deal.publishDueDate, paymentDueDate: deal.paymentDueDate,
+        revisionCount: deal.revisionCount, secondaryUsage: deal.secondaryUsage, paymentCondition: deal.paymentCondition,
+        tasks: [...deal.tasks], risks: [...deal.risks] });
+    }
+  }, [searchParams, deals, editingId]);
+
+  const updatePageState = (updates: Record<string, string | null>, replace = false) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => value === null ? next.delete(key) : next.set(key, value));
+    setSearchParams(next, { replace });
+  };
 
   const startNotionConnect = async () => {
     setNotionBusy('connect'); setError(null);
@@ -118,6 +142,13 @@ export default function DealsPage() {
       draftDueDate: deal.draftDueDate, publishDueDate: deal.publishDueDate, paymentDueDate: deal.paymentDueDate,
       revisionCount: deal.revisionCount, secondaryUsage: deal.secondaryUsage, paymentCondition: deal.paymentCondition,
       tasks: [...deal.tasks], risks: [...deal.risks] });
+    updatePageState({ view: 'list', edit: String(deal.id), deal: null });
+  };
+
+  const closeEditing = () => {
+    updatePageState({ edit: null }, true);
+    setEditingId(null);
+    setDraft(null);
   };
 
   const changeDraft = <K extends keyof DealDetailsInput>(key: K, value: DealDetailsInput[K]) => setDraft((current) => current ? { ...current, [key]: value } : current);
@@ -125,7 +156,7 @@ export default function DealsPage() {
     if (editingId === null || !draft) return; setSaving(true); setError(null);
     try {
       const updated = await updateDeal(editingId, draft);
-      setDeals((items) => items.map((item) => item.id === editingId ? updated : item)); setEditingId(null); setDraft(null);
+      setDeals((items) => items.map((item) => item.id === editingId ? updated : item)); closeEditing();
     } catch { setError('거래 상세 수정에 실패했습니다. 입력값을 확인해주세요.'); }
     finally { setSaving(false); }
   };
@@ -143,7 +174,7 @@ export default function DealsPage() {
   return (
     <>
       {dunningDeal && <DunningModal deal={dunningDeal} onClose={() => setDunningDeal(null)} />}
-      <header className="page-header"><div><p className="eyebrow">DEAL PIPELINE</p><h1 className="page-title">거래 관리</h1><p className="page-description">제안부터 입금까지 거래의 현재 위치와 중요한 조건을 한눈에 확인하세요.</p></div><div className="page-actions"><div className="view-toggle"><button className={`view-toggle-btn${view === 'pipeline' ? ' active' : ''}`} onClick={() => setView('pipeline')}>파이프라인</button><button className={`view-toggle-btn${view === 'list' ? ' active' : ''}`} onClick={() => setView('list')}>목록</button></div><Link className="btn btn-primary" to="/proposals">＋ 새 제안 분석</Link></div></header>
+      <header className="page-header"><div><p className="eyebrow">DEAL PIPELINE</p><h1 className="page-title">거래 관리</h1><p className="page-description">제안부터 입금까지 거래의 현재 위치와 중요한 조건을 한눈에 확인하세요.</p></div><div className="page-actions"><div className="view-toggle"><button className={`view-toggle-btn${view === 'pipeline' ? ' active' : ''}`} onClick={() => updatePageState({ view: null, deal: null, edit: null })}>파이프라인</button><button className={`view-toggle-btn${view === 'list' ? ' active' : ''}`} onClick={() => updatePageState({ view: 'list', deal: null })}>목록</button></div><Link className="btn btn-primary" to="/proposals">＋ 새 제안 분석</Link></div></header>
       {overdue.length > 0 && (
         <div className="overdue-banner">
           <div>
@@ -177,7 +208,7 @@ export default function DealsPage() {
               {dealsByStatus[status].length === 0
                 ? <div className="pipeline-col-empty">없음</div>
                 : dealsByStatus[status].map((deal) => (
-                  <div key={deal.id} className={`pipeline-card${expandedPipelineId === deal.id ? ' pipeline-card-expanded' : ''}`} onClick={() => setExpandedPipelineId(expandedPipelineId === deal.id ? null : deal.id)}>
+                  <div key={deal.id} className={`pipeline-card${expandedPipelineId === deal.id ? ' pipeline-card-expanded' : ''}`} onClick={() => updatePageState({ deal: expandedPipelineId === deal.id ? null : String(deal.id) })}>
                     <div className="pipeline-card-client">{deal.client ?? '거래처 확인 필요'}</div>
                     {deal.amount != null && (
                       <div className="pipeline-card-amount">
@@ -198,7 +229,7 @@ export default function DealsPage() {
                           : <button className="btn btn-secondary btn-sm" onClick={() => void sendToNotion(deal.id)} disabled={!notion?.configured || deal.status === 'REVIEW' || notionBusy !== null}>{notionBusy === deal.id ? '내보내는 중…' : 'Notion으로 보내기'}</button>}
                         {google?.connected && <button className="btn btn-secondary btn-sm" onClick={() => void addToCalendar(deal.id)} disabled={(!deal.draftDueDate && !deal.publishDueDate && !deal.paymentDueDate) || googleBusy === deal.id} title={deal.calendarSyncedAt ? `마지막 등록: ${deal.calendarSyncedAt.slice(0, 10)}` : ''}>{googleBusy === deal.id ? '등록 중…' : deal.calendarSyncedAt ? '📅 재등록' : '📅 Calendar'}</button>}
                         {isOverdue(deal) && <button className="btn btn-sm" style={{ background: '#fff4f0', color: '#c0390f', border: '1px solid #ffd4c8' }} onClick={() => setDunningDeal(deal)}>입금 확인 요청</button>}
-                        <button className="btn btn-secondary btn-sm" onClick={() => { startEditing(deal); setView('list'); }}>상세 수정</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => startEditing(deal)}>상세 수정</button>
                       </div>
                     )}
                   </div>
@@ -217,7 +248,7 @@ export default function DealsPage() {
             <div className="expense-form-grid" style={{ marginTop: 14 }}><label className="field"><span className="field-label">초안 기한</span><input type="date" value={draft.draftDueDate ?? ''} onChange={(e) => changeDraft('draftDueDate', e.target.value || null)} /></label><label className="field"><span className="field-label">게시 기한</span><input type="date" value={draft.publishDueDate ?? ''} onChange={(e) => changeDraft('publishDueDate', e.target.value || null)} /></label><label className="field"><span className="field-label">입금 예정일</span><input type="date" value={draft.paymentDueDate ?? ''} onChange={(e) => changeDraft('paymentDueDate', e.target.value || null)} /></label></div>
             <div className="form-grid" style={{ marginTop: 14 }}><label className="field"><span className="field-label">2차 사용</span><input value={draft.secondaryUsage ?? ''} onChange={(e) => changeDraft('secondaryUsage', e.target.value || null)} /></label><label className="field"><span className="field-label">지급 조건</span><input value={draft.paymentCondition ?? ''} onChange={(e) => changeDraft('paymentCondition', e.target.value || null)} /></label></div>
             <div className="stack" style={{ marginTop: 14 }}><label className="field"><span className="field-label">작업물</span><textarea rows={3} value={draft.deliverables.join('\n')} onChange={(e) => changeDraft('deliverables', splitLines(e.target.value))} /></label><label className="field"><span className="field-label">작업 체크리스트</span><textarea rows={4} value={draft.tasks.join('\n')} onChange={(e) => changeDraft('tasks', splitLines(e.target.value))} /></label><label className="field"><span className="field-label">위험·확인 항목</span><textarea rows={4} value={draft.risks.join('\n')} onChange={(e) => changeDraft('risks', splitLines(e.target.value))} /></label></div>
-            <div className="action-row" style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={() => void saveDetails()} disabled={saving}>{saving ? '저장 중…' : '상세 저장'}</button><button className="btn btn-secondary" onClick={() => { setEditingId(null); setDraft(null); }}>취소</button></div>
+            <div className="action-row" style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={() => void saveDetails()} disabled={saving}>{saving ? '저장 중…' : '상세 저장'}</button><button className="btn btn-secondary" onClick={closeEditing}>취소</button></div>
           </div>}
           <div className="deal-footer"><select aria-label="거래 상태" value={deal.status} onChange={(event) => changeStatus(deal.id, event.target.value as DealStatus)} style={{ width: 'auto' }}>
               {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
