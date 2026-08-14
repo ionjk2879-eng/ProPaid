@@ -140,6 +140,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .pipeline-card:hover { box-shadow: 0 6px 20px rgba(30,42,68,.09); }
 .pipeline-card-expanded { border-color: var(--primary); box-shadow: 0 6px 20px rgba(30,42,68,.12); }
 .pipeline-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(13,18,34,.52); backdrop-filter: blur(2px); }
+.modal-panel { background: #fff; border-radius: 18px; padding: 28px; width: 100%; max-width: 540px; box-shadow: 0 20px 60px rgba(13,18,34,.18); display: flex; flex-direction: column; }
+.modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.btn-icon { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--muted); padding: 4px 8px; border-radius: 6px; line-height: 1; }
+.btn-icon:hover { background: #f0f2f5; }
+.dunning-textarea { width: 100%; min-height: 260px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; font: 400 13px/1.7 'Noto Sans KR', sans-serif; resize: vertical; background: #fafbfc; color: var(--navy); box-sizing: border-box; }
+.overdue-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-radius: 12px; background: #fff4f0; border: 1px solid #ffd4c8; margin-bottom: 20px; flex-wrap: wrap; }
+.overdue-banner-text { font: 600 14px Manrope, sans-serif; color: #c0390f; }
+.overdue-banner-sub { font: 400 12px Manrope, sans-serif; color: #e05a35; margin-top: 2px; }
 .pipeline-card-client { font-size: 13px; font-weight: 800; margin-bottom: 5px; }
 .pipeline-card-amount { font: 700 14px/1 Manrope, sans-serif; color: var(--primary); margin-bottom: 7px; }
 .withholding-badge { display: flex; flex-direction: column; gap: 1px; margin-top: 4px; font: 400 11px/1.4 Manrope, sans-serif; color: var(--muted); }

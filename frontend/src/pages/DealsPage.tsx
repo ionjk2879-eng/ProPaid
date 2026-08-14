@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import WithholdingBadge from '../components/WithholdingBadge';
 import { Link } from 'react-router-dom';
 import { deleteDeal, fetchDeals, updateDeal, updateDealStatus, type Deal, type DealDetailsInput, type DealStatus } from '../api/deals';
 import { connectNotion, disconnectNotion, exportDealToNotion, fetchNotionStatus, setupNotionWorkspace, type NotionStatus } from '../api/notion';
 import { connectGoogle, disconnectGoogle, fetchGoogleStatus, syncDealToCalendar, type GoogleStatus } from '../api/google';
+import WithholdingBadge from '../components/WithholdingBadge';
+import DunningModal from '../components/DunningModal';
+import { isOverdue } from '../utils/dunning';
 
 const statusLabels: Record<DealStatus, string> = {
   REVIEW: '확인 필요', CONFIRMED: '확정', IN_PROGRESS: '진행 중', COMPLETED: '작업 완료', PAID: '입금 완료',
@@ -23,6 +25,7 @@ export default function DealsPage() {
   const [googleBusy, setGoogleBusy] = useState<number | 'connect' | 'disconnect' | null>(null);
   const [notice, setNotice] = useState<ReactNode | null>(null);
   const [expandedPipelineId, setExpandedPipelineId] = useState<number | null>(null);
+  const [dunningDeal, setDunningDeal] = useState<Deal | null>(null);
 
   const load = () => fetchDeals().then(setDeals).catch(() => setError('거래 목록을 불러오지 못했습니다.'));
   useEffect(() => {
@@ -127,6 +130,7 @@ export default function DealsPage() {
     finally { setSaving(false); }
   };
 
+  const overdue = deals.filter(isOverdue);
   const total = deals.filter((deal) => deal.status !== 'REVIEW').reduce((sum, deal) => sum + (deal.amount ?? 0), 0);
   const paid = deals.filter((deal) => deal.status === 'PAID').reduce((sum, deal) => sum + (deal.amount ?? 0), 0);
   const statusOrder: DealStatus[] = ['REVIEW', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'PAID'];
@@ -138,7 +142,19 @@ export default function DealsPage() {
 
   return (
     <>
+      {dunningDeal && <DunningModal deal={dunningDeal} onClose={() => setDunningDeal(null)} />}
       <header className="page-header"><div><p className="eyebrow">DEAL PIPELINE</p><h1 className="page-title">거래 관리</h1><p className="page-description">제안부터 입금까지 거래의 현재 위치와 중요한 조건을 한눈에 확인하세요.</p></div><div className="page-actions"><div className="view-toggle"><button className={`view-toggle-btn${view === 'pipeline' ? ' active' : ''}`} onClick={() => setView('pipeline')}>파이프라인</button><button className={`view-toggle-btn${view === 'list' ? ' active' : ''}`} onClick={() => setView('list')}>목록</button></div><Link className="btn btn-primary" to="/proposals">＋ 새 제안 분석</Link></div></header>
+      {overdue.length > 0 && (
+        <div className="overdue-banner">
+          <div>
+            <div className="overdue-banner-text">입금 지연 {overdue.length}건</div>
+            <div className="overdue-banner-sub">{overdue.map((d) => d.client ?? '거래처 미확인').join(' · ')}</div>
+          </div>
+          <button className="btn btn-primary" style={{ background: '#c0390f', borderColor: '#c0390f' }} onClick={() => setDunningDeal(overdue[0])}>
+            입금 확인 요청 초안 보기
+          </button>
+        </div>
+      )}
       <section className="grid-3" style={{ marginBottom: 24 }}><div className="card metric-card"><div className="metric-label">전체 거래</div><div className="metric-value">{deals.length}건</div><div className="metric-note">확인 대기 포함</div></div><div className="card metric-card"><div className="metric-label">확정 거래 금액</div><div className="metric-value">{total.toLocaleString()}원</div><div className="metric-note">확인 완료된 거래</div></div><div className="card metric-card"><div className="metric-label">입금 완료</div><div className="metric-value">{paid.toLocaleString()}원</div><div className="metric-note">실제 수령 기준</div></div></section>
       <section className="card integration-card">
         <div><p className="eyebrow">NOTION EXPORT</p><h2 className="card-title">Notion 연결</h2><p className="card-copy">사용자가 확인한 거래만 선택해서 개인 Notion 페이지로 내보냅니다.</p></div>
@@ -181,6 +197,7 @@ export default function DealsPage() {
                           ? <a className="btn btn-secondary btn-sm" href={deal.notionPageUrl} target="_blank" rel="noreferrer">Notion에서 열기</a>
                           : <button className="btn btn-secondary btn-sm" onClick={() => void sendToNotion(deal.id)} disabled={!notion?.configured || deal.status === 'REVIEW' || notionBusy !== null}>{notionBusy === deal.id ? '내보내는 중…' : 'Notion으로 보내기'}</button>}
                         {google?.connected && <button className="btn btn-secondary btn-sm" onClick={() => void addToCalendar(deal.id)} disabled={(!deal.draftDueDate && !deal.publishDueDate && !deal.paymentDueDate) || googleBusy === deal.id} title={deal.calendarSyncedAt ? `마지막 등록: ${deal.calendarSyncedAt.slice(0, 10)}` : ''}>{googleBusy === deal.id ? '등록 중…' : deal.calendarSyncedAt ? '📅 재등록' : '📅 Calendar'}</button>}
+                        {isOverdue(deal) && <button className="btn btn-sm" style={{ background: '#fff4f0', color: '#c0390f', border: '1px solid #ffd4c8' }} onClick={() => setDunningDeal(deal)}>입금 확인 요청</button>}
                         <button className="btn btn-secondary btn-sm" onClick={() => { startEditing(deal); setView('list'); }}>상세 수정</button>
                       </div>
                     )}
@@ -204,7 +221,7 @@ export default function DealsPage() {
           </div>}
           <div className="deal-footer"><select aria-label="거래 상태" value={deal.status} onChange={(event) => changeStatus(deal.id, event.target.value as DealStatus)} style={{ width: 'auto' }}>
               {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select><div className="action-row"><span className={`badge badge-${deal.status.toLowerCase().replace('_', '-')}`}>{statusLabels[deal.status]}</span>{deal.notionPageUrl ? <a className="btn btn-secondary btn-sm" href={deal.notionPageUrl} target="_blank" rel="noreferrer">Notion에서 열기</a> : <button className="btn btn-secondary btn-sm" onClick={() => void sendToNotion(deal.id)} disabled={!notion?.configured || deal.status === 'REVIEW' || notionBusy !== null}>{notionBusy === deal.id ? '내보내는 중…' : 'Notion으로 보내기'}</button>}{google?.connected && <button className="btn btn-secondary btn-sm" onClick={() => void addToCalendar(deal.id)} disabled={(!deal.draftDueDate && !deal.publishDueDate && !deal.paymentDueDate) || googleBusy === deal.id} title={deal.calendarSyncedAt ? `마지막 등록: ${deal.calendarSyncedAt.slice(0, 10)}` : ''}>{googleBusy === deal.id ? '등록 중…' : deal.calendarSyncedAt ? '📅 재등록' : '📅 Calendar'}</button>}<button className="btn btn-secondary btn-sm" onClick={() => startEditing(deal)} disabled={editingId === deal.id}>상세 수정</button><button className="btn btn-danger btn-sm" onClick={() => remove(deal.id)}>삭제</button></div></div>
+            </select><div className="action-row"><span className={`badge badge-${deal.status.toLowerCase().replace('_', '-')}`}>{statusLabels[deal.status]}</span>{isOverdue(deal) && <button className="btn btn-sm" style={{ background: '#fff4f0', color: '#c0390f', border: '1px solid #ffd4c8' }} onClick={() => setDunningDeal(deal)}>입금 확인 요청</button>}{deal.notionPageUrl ? <a className="btn btn-secondary btn-sm" href={deal.notionPageUrl} target="_blank" rel="noreferrer">Notion에서 열기</a> : <button className="btn btn-secondary btn-sm" onClick={() => void sendToNotion(deal.id)} disabled={!notion?.configured || deal.status === 'REVIEW' || notionBusy !== null}>{notionBusy === deal.id ? '내보내는 중…' : 'Notion으로 보내기'}</button>}{google?.connected && <button className="btn btn-secondary btn-sm" onClick={() => void addToCalendar(deal.id)} disabled={(!deal.draftDueDate && !deal.publishDueDate && !deal.paymentDueDate) || googleBusy === deal.id} title={deal.calendarSyncedAt ? `마지막 등록: ${deal.calendarSyncedAt.slice(0, 10)}` : ''}>{googleBusy === deal.id ? '등록 중…' : deal.calendarSyncedAt ? '📅 재등록' : '📅 Calendar'}</button>}<button className="btn btn-secondary btn-sm" onClick={() => startEditing(deal)} disabled={editingId === deal.id}>상세 수정</button><button className="btn btn-danger btn-sm" onClick={() => remove(deal.id)}>삭제</button></div></div>
         </article>)}
       </div>
     </>
