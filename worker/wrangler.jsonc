@@ -42,7 +42,10 @@
     { "name": "ANALYSIS_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
     { "name": "MAIL_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
   ],
+  // Workers Free 플랜은 계정 전체에서 크론 트리거를 5개까지만 허용한다. 매시간 실행되는
+  // 알림 점검과 매일 18:00(UTC) 실행되는 계정 정리를 각각 별도 크론으로 등록하면 이 한도에
+  // 쉽게 걸리므로, 트리거는 시간당 1개만 등록하고 scheduled 핸들러 안에서 시각을 보고 분기한다.
   "triggers": {
-    "crons": ["0 18 * * *", "0 * * * *"]
+    "crons": ["0 * * * *"]
   }
 }

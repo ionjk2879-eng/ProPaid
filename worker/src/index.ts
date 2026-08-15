@@ -1147,12 +1147,13 @@ async function verifyWebhook(payload: string, headers: Headers, secret: string):
 
 export default {
   fetch: app.fetch,
+  // 크론 트리거는 매시간 하나만 등록되어 있다(Workers Free 플랜의 계정당 5개 제한 때문 — wrangler.jsonc 참고).
+  // 실패 알림 점검은 매시간 실행하고, 계정 정리·백업은 예전과 같은 시각(UTC 18시)에만 실행해 하루 한 번으로 유지한다.
   scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
     const jobId = crypto.randomUUID();
-    if (event.cron === '0 * * * *') {
-      ctx.waitUntil(runFailureAlertCheck(env, jobId));
-      return;
+    ctx.waitUntil(runFailureAlertCheck(env, jobId));
+    if (new Date(event.scheduledTime).getUTCHours() === 18) {
+      ctx.waitUntil(runAccountMaintenance(env, jobId));
     }
-    ctx.waitUntil(runAccountMaintenance(env, jobId));
   },
 };
