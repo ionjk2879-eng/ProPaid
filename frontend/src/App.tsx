@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
+import TodayPage from './pages/TodayPage';
 import DashboardPage from './pages/DashboardPage';
 import ProposalPage from './pages/ProposalPage';
 import DealsPage from './pages/DealsPage';
@@ -25,13 +26,14 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
           <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+            <Route path="/today" element={<TodayPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/deals" element={<DealsPage />} />
             <Route path="/proposals" element={<ProposalPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/inbox" replace />} />
+          <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

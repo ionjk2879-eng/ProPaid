@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const navigation = [
+  { to: '/today', icon: '☀', label: '오늘' },
   { to: '/inbox', icon: '✉', label: '받은 제안' },
   { to: '/deals', icon: '▦', label: '거래 관리' },
   { to: '/proposals', icon: '✦', label: '직접 분석' },
@@ -10,7 +11,7 @@ const navigation = [
   { to: '/settings', icon: '⚙', label: '설정' },
 ];
 
-const pageNames: Record<string, string> = { '/inbox': '받은 제안', '/deals': '거래 관리', '/proposals': '직접 분석', '/dashboard': '재무 관리', '/settings': '설정' };
+const pageNames: Record<string, string> = { '/today': '오늘', '/inbox': '받은 제안', '/deals': '거래 관리', '/proposals': '직접 분석', '/dashboard': '재무 관리', '/settings': '설정' };
 
 export default function AppShell() {
   const { nickname, logout } = useAuth();
@@ -34,7 +35,7 @@ export default function AppShell() {
       <button className="sidebar-backdrop" aria-label="메뉴 닫기" onClick={() => setMobileMenuOpen(false)} />
       <aside className="sidebar" aria-label="사이드 메뉴">
         <div className="sidebar-head">
-          <NavLink className="brand" to="/inbox"><span className="brand-mark"><img src="/favicon.svg" alt="" /></span><span className="brand-name">Propaid</span></NavLink>
+          <NavLink className="brand" to="/today"><span className="brand-mark"><img src="/favicon.svg" alt="" /></span><span className="brand-name">Propaid</span></NavLink>
           <button className="sidebar-toggle" type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'} title={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}>
             <span aria-hidden="true">{sidebarCollapsed ? '›' : '‹'}</span>
           </button>

@@ -164,6 +164,19 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .empty-state h3 { margin: 0 0 7px; }
 .empty-state p { margin: 0; color: var(--muted); font-size: 13px; }
 
+.today-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.today-section-card { min-width: 0; }
+.today-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.today-card-empty { margin-top: 12px; padding: 16px; text-align: center; border: 1px dashed #dde1ea; border-radius: 10px; color: var(--muted); font-size: 12px; }
+.today-item-list { margin-top: 12px; display: grid; gap: 8px; }
+.today-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--navy); background: #fff; text-decoration: none; transition: .16s ease; }
+.today-item:hover { border-color: var(--primary); box-shadow: 0 6px 14px rgba(91,92,226,.08); }
+.today-item-main { display: grid; gap: 2px; min-width: 0; }
+.today-item-title { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-item-sub { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-item-tag { flex: 0 0 auto; padding: 4px 8px; border-radius: 7px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.today-more { margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--primary); text-decoration: none; }
+
 .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
 .view-toggle-btn { min-height: 34px; padding: 6px 14px; border: 0; border-radius: 0; font-size: 12px; font-weight: 700; background: white; color: var(--muted); transition: .15s; }
 .view-toggle-btn.active { background: var(--primary); color: white; }
@@ -406,7 +419,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .pipeline-board-help p { text-align: left; }
   .pipeline-flow { justify-content: flex-start; overflow-x: auto; }
   .page-header, .deal-top, .deal-footer, .editor-footer { align-items: stretch; flex-direction: column; }
-  .grid-2, .grid-3, .form-grid, .chart-grid, .message-analysis { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .form-grid, .chart-grid, .message-analysis, .today-grid { grid-template-columns: 1fr; }
   .integration-grid { grid-template-columns: 1fr; }
   .proposal-workspace-result { grid-template-columns: 1fr; }
   .proposal-workspace-result .proposal-source-card { position: static; }
