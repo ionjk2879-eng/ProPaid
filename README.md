@@ -151,6 +151,9 @@ Claude Messages API의 Structured Outputs 어댑터는 준비되어 있지만 AP
 cd worker
 npm ci
 npm run typecheck
+npm test
 npm run db:local
 npm run build:frontend
 ```
+
+`npm test`는 [Vitest](https://vitest.dev/)로 `worker/src/analyze.ts`(규칙 기반 제안 분석기)를 검증합니다. 정규식 패턴 하나를 바꾸면 문구 표현이 조금만 달라져도 다른 필드가 조용히 깨질 수 있으므로, `analyze.ts`를 수정할 때는 반드시 함께 실행하고 새 케이스가 있으면 `worker/src/analyze.test.ts`에 추가하세요.

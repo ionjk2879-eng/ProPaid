@@ -43,7 +43,7 @@ function contextualDate(text: string, label: string): string | null {
 // "게시" 같은 라벨 없이 "8월 20일까지 유튜브 영상 1건... 부탁드립니다"처럼 날짜 뒤에 곧바로
 // 작업물이 나오는 문장도 게시(납품) 기한으로 본다. exclude와 같은 날짜면(초안 기한과 중복) 무시한다.
 function deliverableDeadline(text: string, exclude: string | null): string | null {
-  const match = text.match(/(\d{1,2})월\s*(\d{1,2})일\s*까지[^\n.]{0,40}?(?:유튜브|숏츠|릴스|인스타그램|블로그|영상|게시물)/);
+  const match = text.match(/(\d{1,2})월\s*(\d{1,2})일\s*까지[^\n.]{0,40}?(?:유튜브|숏츠|릴스|인스타그램|틱톡|블로그|영상|게시물)/);
   if (!match) return null;
   const year = new Date().getFullYear();
   const date = `${year}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
@@ -58,17 +58,18 @@ export function analyzeProposal(raw: string): ProposalAnalysis {
 
   // "D 스튜디오입니다"처럼 서술어가 띄어쓰기 없이 바로 붙는 경우가 많아 정규식 경계만으로는 못 자르므로,
   // 잡히고 나서 문장을 맺는 꼬리(입니다/임)를 후처리로 떼어낸다.
-  const client = first(text, /(?:거래처|브랜드|광고주|클라이언트)(?:은|는|이|가)?\s*[:：]?\s*([^\n,]{1,60}?)(?=\s+(?:유튜브|숏츠|인스타그램|릴스|블로그|영상|게시물|금액|예산|보수)|[,\n]|$)/)
+  const client = first(text, /(?:거래처|브랜드|광고주|클라이언트)(?:은|는|이|가)?\s*[:：]?\s*([^\n,]{1,60}?)(?=\s+(?:유튜브|숏츠|인스타그램|릴스|틱톡|블로그|영상|게시물|금액|예산|보수)|[,\n]|$)/)
     ?.replace(/(?:입니다|임)\.?\s*$/, '').trim() || null;
   if (client) matchedRules.push('거래처 표현'); else warnings.push('거래처를 찾지 못했습니다.');
 
   const dealType = /유튜브|숏츠/.test(text) ? '유튜브 협찬'
     : /인스타그램|릴스/.test(text) ? '인스타그램 협찬'
-      : /블로그/.test(text) ? '블로그 광고' : /광고/.test(text) ? '광고' : /외주/.test(text) ? '외주' : null;
+      : /틱톡/.test(text) ? '틱톡 협찬'
+        : /블로그/.test(text) ? '블로그 광고' : /광고/.test(text) ? '광고' : /외주/.test(text) ? '외주' : null;
   if (dealType) matchedRules.push('채널·제안 유형');
 
-  const deliverables = [...text.matchAll(/(유튜브\s*영상|숏츠|릴스|인스타그램\s*게시물|블로그\s*포스트|영상|게시물)\s*(\d+)\s*건/gi)]
-    .map((match) => `${match[1].replace(/\s+/g, ' ')} ${match[2]}건`)
+  const deliverables = [...text.matchAll(/(유튜브\s*영상|숏츠|릴스|인스타그램\s*게시물|틱톡\s*영상|블로그\s*포스트|영상|게시물)\s*(\d+)\s*(건|편)/gi)]
+    .map((match) => `${match[1].replace(/\s+/g, ' ')} ${match[2]}${match[3]}`)
     .filter((value, index, all) => all.indexOf(value) === index);
   if (deliverables.length) matchedRules.push('작업물 수량'); else warnings.push('작업 범위를 찾지 못했습니다.');
 

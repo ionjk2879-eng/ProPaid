@@ -7,6 +7,7 @@
     "build:frontend": "npm --prefix ../frontend ci && npm --prefix ../frontend run build",
     "deploy": "npm run build:frontend && wrangler deploy",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "db:local": "wrangler d1 migrations apply propaid --local",
     "predb:remote": "node scripts/backup-d1.mjs",
     "db:remote": "wrangler d1 migrations apply propaid --remote",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260801.1",
     "typescript": "^5.9.2",
+    "vitest": "^4.1.10",
     "wrangler": "^4.118.0"
   }
 }
