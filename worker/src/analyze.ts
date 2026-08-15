@@ -56,7 +56,10 @@ export function analyzeProposal(raw: string): ProposalAnalysis {
   const risks: string[] = [];
   const matchedRules: string[] = [];
 
-  const client = first(text, /(?:거래처|브랜드|광고주|클라이언트)\s*[:：]?\s*([^\n,]{1,60}?)(?=\s+(?:유튜브|숏츠|인스타그램|릴스|블로그|영상|게시물|금액|예산|보수)|[,\n]|$)/);
+  // "D 스튜디오입니다"처럼 서술어가 띄어쓰기 없이 바로 붙는 경우가 많아 정규식 경계만으로는 못 자르므로,
+  // 잡히고 나서 문장을 맺는 꼬리(입니다/임)를 후처리로 떼어낸다.
+  const client = first(text, /(?:거래처|브랜드|광고주|클라이언트)(?:은|는|이|가)?\s*[:：]?\s*([^\n,]{1,60}?)(?=\s+(?:유튜브|숏츠|인스타그램|릴스|블로그|영상|게시물|금액|예산|보수)|[,\n]|$)/)
+    ?.replace(/(?:입니다|임)\.?\s*$/, '').trim() || null;
   if (client) matchedRules.push('거래처 표현'); else warnings.push('거래처를 찾지 못했습니다.');
 
   const dealType = /유튜브|숏츠/.test(text) ? '유튜브 협찬'
@@ -86,7 +89,7 @@ export function analyzeProposal(raw: string): ProposalAnalysis {
   const publishDueDate = contextualDate(text, '(?:게시|업로드)') ?? deliverableDeadline(text, draftDueDate);
   if (draftDueDate || publishDueDate) matchedRules.push('초안·게시 기한');
 
-  const revisionText = first(text, /수정(?:\s*가능)?\s*[:：]?\s*(\d+)\s*회/);
+  const revisionText = first(text, /수정(?:\s*가능)?(?:은|는|이|가)?\s*[:：]?\s*(\d+)\s*회/);
   const revisionCount = revisionText ? Number(revisionText) : null;
   if (revisionCount !== null) matchedRules.push('수정 횟수'); else risks.push('수정 횟수가 명시되지 않음');
 
@@ -102,7 +105,7 @@ export function analyzeProposal(raw: string): ProposalAnalysis {
   const uniqueTerms = [...new Set(paymentTerms)];
   const paymentCondition = uniqueTerms.length ? uniqueTerms.join(' · ') : null;
   if (paymentCondition) matchedRules.push('지급 조건'); else { warnings.push('지급 조건을 찾지 못했습니다.'); risks.push('입금 조건이 명시되지 않음'); }
-  if (/원천징수\s*포함/.test(text)) risks.push('원천징수 포함 금액인지 실수령액 확인 필요');
+  if (/(?:원천세|원천징수)\s*포함/.test(text)) risks.push('원천징수 포함 금액인지 실수령액 확인 필요');
 
   const tasks = deliverables.map((item) => `${item} 제작`);
   if (draftDueDate) tasks.push(`${draftDueDate}까지 초안 전달`);
