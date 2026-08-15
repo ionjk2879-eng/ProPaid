@@ -40,6 +40,16 @@ function contextualDate(text: string, label: string): string | null {
   return `${year}-${short[1].padStart(2, '0')}-${short[2].padStart(2, '0')}`;
 }
 
+// "게시" 같은 라벨 없이 "8월 20일까지 유튜브 영상 1건... 부탁드립니다"처럼 날짜 뒤에 곧바로
+// 작업물이 나오는 문장도 게시(납품) 기한으로 본다. exclude와 같은 날짜면(초안 기한과 중복) 무시한다.
+function deliverableDeadline(text: string, exclude: string | null): string | null {
+  const match = text.match(/(\d{1,2})월\s*(\d{1,2})일\s*까지[^\n.]{0,40}?(?:유튜브|숏츠|릴스|인스타그램|블로그|영상|게시물)/);
+  if (!match) return null;
+  const year = new Date().getFullYear();
+  const date = `${year}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
+  return date === exclude ? null : date;
+}
+
 export function analyzeProposal(raw: string): ProposalAnalysis {
   const text = raw.replace(/\u00a0/g, ' ').trim();
   const warnings: string[] = [];
@@ -73,14 +83,15 @@ export function analyzeProposal(raw: string): ProposalAnalysis {
   if (dates.length) matchedRules.push('날짜 표현'); else warnings.push('프로젝트 날짜를 찾지 못했습니다.');
 
   const draftDueDate = contextualDate(text, '초안');
-  const publishDueDate = contextualDate(text, '(?:게시|업로드)');
+  const publishDueDate = contextualDate(text, '(?:게시|업로드)') ?? deliverableDeadline(text, draftDueDate);
   if (draftDueDate || publishDueDate) matchedRules.push('초안·게시 기한');
 
   const revisionText = first(text, /수정(?:\s*가능)?\s*[:：]?\s*(\d+)\s*회/);
   const revisionCount = revisionText ? Number(revisionText) : null;
   if (revisionCount !== null) matchedRules.push('수정 횟수'); else risks.push('수정 횟수가 명시되지 않음');
 
-  const secondaryUsage = first(text, /2차\s*사용(?:\s*기간)?\s*[:：]?\s*(\d+\s*(?:개월|년))/);
+  // "2차 사용"과 "2차 활용"은 계약서에서 같은 뜻으로 섞어 쓰이고, 조사(은/는)가 라벨에 바로 붙는 경우도 있다.
+  const secondaryUsage = first(text, /2차\s*(?:사용|활용)(?:\s*기간)?(?:은|는)?\s*[:：]?\s*(\d+\s*(?:개월|년))/);
   if (secondaryUsage) matchedRules.push('2차 사용 기간'); else risks.push('2차 사용 조건이 명시되지 않음');
 
   const paymentTerms: string[] = [];
