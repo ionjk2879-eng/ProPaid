@@ -17,6 +17,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('nickname');
       window.location.href = '/login';
     }
     const message = error.response?.data?.message;

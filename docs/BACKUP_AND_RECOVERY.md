@@ -25,9 +25,9 @@ Cloudflare D1의 Time Travel은 "자동으로 백업된다"는 안심을 주지�
 
 ```bash
 cd worker
-npx wrangler d1 time-travel info propaid --remote
+npx wrangler d1 time-travel info propaid
 # 특정 시점을 지정하려면:
-npx wrangler d1 time-travel info propaid --remote --timestamp="2026-08-14T09:00:00Z"
+npx wrangler d1 time-travel info propaid --timestamp="2026-08-14T09:00:00Z"
 ```
 
 북마크는 D1이 특정 시점을 가리키는 결정론적 식별자입니다. 같은 타임스탬프는 항상 같은 북마크를 만들어냅니다.
@@ -35,9 +35,9 @@ npx wrangler d1 time-travel info propaid --remote --timestamp="2026-08-14T09:00:
 ### 1-2. 특정 시점으로 복구
 
 ```bash
-npx wrangler d1 time-travel restore propaid --remote --timestamp="2026-08-14T09:00:00Z"
+npx wrangler d1 time-travel restore propaid --timestamp="2026-08-14T09:00:00Z"
 # 또는 북마크로:
-npx wrangler d1 time-travel restore propaid --remote --bookmark=<BOOKMARK>
+npx wrangler d1 time-travel restore propaid --bookmark=<BOOKMARK>
 ```
 
 **⚠️ 이 명령은 매우 파괴적입니다.**
@@ -101,7 +101,7 @@ npm run db:remote
 `scripts/backup-d1.mjs`가 하는 일:
 
 1. `wrangler d1 export propaid --remote`로 스키마+데이터 전체를 `worker/backups/propaid-<타임스탬프>.sql`에 저장 (사람이 어디서든 읽을 수 있는 순수 SQL 파일).
-2. `wrangler d1 time-travel info propaid --remote`로 지금 이 순간의 북마크를 출력(§1-3의 자동 북마크와 별개로, 실행 로그에 남겨 나중에 참고할 수 있도록).
+2. `wrangler d1 time-travel info propaid`로 지금 이 순간의 북마크를 출력(§1-3의 자동 북마크와 별개로, 실행 로그에 남겨 나중에 참고할 수 있도록).
 
 `worker/backups/`는 `.gitignore`에 포함돼 있어 저장소에 커밋되지 않습니다(개인정보가 담긴 원본 덤프이므로). **내려받은 `.sql` 파일은 로컬 디스크 밖(별도 백업 저장소나 비밀번호 관리자의 파일 첨부 등)에도 최소 1부 보관하는 것을 권장합니다** — 개발 머신 하나가 고장 나면 이 파일도 함께 사라지기 때문입니다.
 
@@ -133,10 +133,10 @@ DB 손상, 잘못된 마이그레이션, 대량 오삭제 등 **최근** 사고�
 ```bash
 cd worker
 # 1. 되돌릴 시점을 정하고 북마크 확인
-npx wrangler d1 time-travel info propaid --remote --timestamp="2026-08-14T09:00:00Z"
+npx wrangler d1 time-travel info propaid --timestamp="2026-08-14T09:00:00Z"
 
 # 2. 복구 실행 (파괴적 — §1-2의 경고를 반드시 읽을 것)
-npx wrangler d1 time-travel restore propaid --remote --timestamp="2026-08-14T09:00:00Z"
+npx wrangler d1 time-travel restore propaid --timestamp="2026-08-14T09:00:00Z"
 
 # 3. 서비스 정상 동작 확인
 curl -s https://propaid-api.ionjk2879.workers.dev/api/health

@@ -1086,6 +1086,7 @@ app.get('/api/reports/finance/csv', async (c) => {
 app.get('/api/reports/subscriptions/pdf', (c) => c.json({ message: 'PDF 보고서는 Cloudflare 전환 후 다시 제공할 예정입니다. CSV를 이용해주세요.' }, 501));
 
 async function saveSubscription(c: AppContext, id?: number) {
+  const isCreate = id === undefined;
   const input = await body<{ serviceName?: string; amount?: number; billingCycle?: string; usageType?: string; accountingCategory?: string }>(c);
   if (!input.serviceName?.trim() || !Number.isFinite(input.amount) || Number(input.amount) < 0) return c.json({ message: '서비스명과 올바른 금액을 입력해주세요.' }, 400);
   if (!['MONTHLY', 'YEARLY'].includes(input.billingCycle ?? '') || !['BUSINESS', 'PERSONAL'].includes(input.usageType ?? '')) return c.json({ message: '결제 주기 또는 사용 구분이 올바르지 않습니다.' }, 400);
@@ -1099,10 +1100,11 @@ async function saveSubscription(c: AppContext, id?: number) {
     id = Number(result.meta.last_row_id);
   }
   const row = await c.env.DB.prepare('SELECT * FROM subscriptions WHERE id = ?').bind(id).first<Record<string, unknown>>();
-  return c.json(subscriptionResponse(row!));
+  return c.json(subscriptionResponse(row!), isCreate ? 201 : 200);
 }
 
 async function saveExpense(c: AppContext, id?: number) {
+  const isCreate = id === undefined;
   const input = await body<Record<string, unknown>>(c);
   const title = String(input.title ?? '').trim();
   const amount = Number(input.amount);
@@ -1135,7 +1137,7 @@ async function saveExpense(c: AppContext, id?: number) {
     id = Number(result.meta.last_row_id);
   }
   const row = await c.env.DB.prepare(`SELECT e.*, d.client AS deal_client FROM expenses e LEFT JOIN deals d ON d.id = e.deal_id WHERE e.id = ? AND e.user_id = ?`).bind(id, getUser(c).id).first<Record<string, unknown>>();
-  return c.json(expenseResponse(row!), id ? 200 : 201);
+  return c.json(expenseResponse(row!), isCreate ? 201 : 200);
 }
 
 function stripHtml(html: string): string {

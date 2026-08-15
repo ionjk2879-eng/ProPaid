@@ -21,7 +21,7 @@ console.log(`\n[1/2] 운영 D1(${DB_NAME})을 ${output} 로 내보냅니다...`)
 run(`npx wrangler d1 export ${DB_NAME} --remote --output=${output}`);
 
 console.log('\n[2/2] 현재 시점의 Time Travel 북마크를 기록합니다 (문제가 생기면 이 시점으로 되돌릴 수 있습니다)...');
-run(`npx wrangler d1 time-travel info ${DB_NAME} --remote`);
+run(`npx wrangler d1 time-travel info ${DB_NAME}`);
 
 console.log(`\n백업 완료: ${output}`);
 console.log('이 파일을 안전한 곳(로컬 밖)에도 보관하는 것을 권장합니다. backups/ 디렉터리는 git에 커밋되지 않습니다.');

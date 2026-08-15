@@ -19,9 +19,9 @@ export default function GoogleAuthCallbackPage() {
       setAuth(accessToken, nickname);
       if (wasRestored) {
         setRestored(true);
-        window.setTimeout(() => navigate('/dashboard', { replace: true }), 2200);
+        window.setTimeout(() => navigate('/today', { replace: true }), 2200);
       } else {
-        navigate('/dashboard', { replace: true });
+        navigate('/today', { replace: true });
       }
       return;
     }
