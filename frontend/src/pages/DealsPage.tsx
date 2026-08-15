@@ -5,6 +5,7 @@ import { connectNotion, disconnectNotion, exportDealToNotion, fetchNotionStatus,
 import { connectGoogle, disconnectGoogle, fetchGoogleStatus, syncDealToCalendar, type GoogleStatus } from '../api/google';
 import WithholdingBadge from '../components/WithholdingBadge';
 import DunningModal from '../components/DunningModal';
+import OverdueWorkspace from '../components/OverdueWorkspace';
 import { isOverdue } from '../utils/dunning';
 
 const statusLabels: Record<DealStatus, string> = {
@@ -178,25 +179,38 @@ export default function DealsPage() {
     <>
       {dunningDeal && <DunningModal deal={dunningDeal} onClose={() => setDunningDeal(null)} />}
       <header className="page-header"><div><p className="eyebrow">DEAL PIPELINE</p><h1 className="page-title">거래 관리</h1><p className="page-description">제안부터 입금까지 거래의 현재 위치와 중요한 조건을 한눈에 확인하세요.</p></div><div className="page-actions"><div className="view-toggle"><button className={`view-toggle-btn${view === 'pipeline' ? ' active' : ''}`} onClick={() => updatePageState({ view: null, deal: null, edit: null })}>파이프라인</button><button className={`view-toggle-btn${view === 'list' ? ' active' : ''}`} onClick={() => updatePageState({ view: 'list', deal: null })}>목록</button></div><Link className="btn btn-primary" to="/proposals">＋ 새 제안 분석</Link></div></header>
-      {overdue.length > 0 && (
-        <div className="overdue-banner">
-          <div>
-            <div className="overdue-banner-text">입금 지연 {overdue.length}건</div>
-            <div className="overdue-banner-sub">{overdue.map((d) => d.client ?? '거래처 미확인').join(' · ')}</div>
-          </div>
-          <button className="btn btn-primary" style={{ background: '#c0390f', borderColor: '#c0390f' }} onClick={() => setDunningDeal(overdue[0])}>
-            입금 확인 요청 초안 보기
-          </button>
-        </div>
-      )}
+      {overdue.length > 0 && <OverdueWorkspace deals={overdue} />}
       <section className="grid-3" style={{ marginBottom: 24 }}><div className="card metric-card"><div className="metric-label">전체 거래</div><div className="metric-value">{deals.length}건</div><div className="metric-note">확인 대기 포함</div></div><div className="card metric-card"><div className="metric-label">확정 거래 금액</div><div className="metric-value">{total.toLocaleString()}원</div><div className="metric-note">확인 완료된 거래</div></div><div className="card metric-card"><div className="metric-label">입금 완료</div><div className="metric-value">{paid.toLocaleString()}원</div><div className="metric-note">실제 수령 기준</div></div></section>
-      <section className="card integration-card">
-        <div><p className="eyebrow">NOTION EXPORT</p><h2 className="card-title">Notion 연결</h2><p className="card-copy">사용자가 확인한 거래만 선택해서 개인 Notion 페이지로 내보냅니다.</p></div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>{notion?.connected ? <><a className="badge badge-saved" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>Notion · {notion.workspaceName || '워크스페이스'} 연결됨 ↗</a><div className="action-row">{!notion.configured && <button className="btn btn-primary" onClick={() => void createNotionWorkspace()} disabled={notionBusy !== null}>{notionBusy === 'setup' ? '만드는 중…' : 'Propaid 공간 만들기'}</button>}<a className="btn btn-secondary btn-sm" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer">Notion에서 열기</a><button className="btn btn-secondary btn-sm" onClick={() => void stopNotion()} disabled={notionBusy !== null}>{notionBusy === 'disconnect' ? '해제 중…' : '연결 해제'}</button></div></> : <button className="btn btn-primary" onClick={() => void startNotionConnect()} disabled={notionBusy !== null}>{notionBusy === 'connect' ? '연결 중…' : 'Notion 연결'}</button>}</div>
-      </section>
-      <section className="card integration-card">
-        <div><p className="eyebrow">CALENDAR SYNC</p><h2 className="card-title">Google Calendar</h2><p className="card-copy">거래별 초안·게시·입금 예정일을 Google Calendar에 자동으로 등록합니다.</p></div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>{google?.connected ? <><span className="badge badge-saved">Google Calendar 연결됨{google.email ? ` · ${google.email}` : ''}</span><div className="action-row"><button className="btn btn-secondary btn-sm" onClick={() => void stopGoogle()} disabled={googleBusy !== null}>{googleBusy === 'disconnect' ? '해제 중…' : '연결 해제'}</button></div></> : <button className="btn btn-primary" onClick={() => void startGoogleConnect()} disabled={googleBusy !== null}>{googleBusy === 'connect' ? '연결 중…' : 'Google Calendar 연결'}</button>}</div>
+      <section className="integration-workspace">
+        <div className="integration-heading"><div><p className="eyebrow">EXTERNAL INTEGRATIONS</p><h2 className="card-title">확인한 거래를, 쓰던 도구로 이어가세요</h2><p className="card-copy">필요한 거래와 일정만 사용자가 직접 내보냅니다.</p></div></div>
+        <div className="integration-grid">
+          <article className="card integration-card integration-card-notion">
+            <div className="integration-card-head">
+              <span className="integration-logo integration-logo-notion" aria-hidden="true">N</span>
+              <div className="integration-title"><h3>Notion 연결</h3><p>확인한 거래만 개인 Notion 페이지로 내보냅니다.</p></div>
+            </div>
+            <div className="integration-status-row">
+              {notion?.connected ? <a className="badge badge-saved" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer">● Notion · {notion.workspaceName || '워크스페이스'} 연결됨 ↗</a> : <span className="integration-status-off">연결 전</span>}
+            </div>
+            <div className="integration-preview" aria-hidden="true">
+              <span className="integration-preview-icon">▦</span><div><b>Propaid 거래 관리</b><small>거래처 · 상태 · 금액 · 핵심 일정</small></div><span className="integration-preview-arrow">→</span>
+            </div>
+            <div className="integration-flow"><span>거래 확인</span><i>→</i><span>직접 내보내기</span><i>→</i><span>Notion 관리</span></div>
+            <div className="integration-actions">{notion?.connected ? <><div className="action-row">{!notion.configured && <button className="btn btn-primary" onClick={() => void createNotionWorkspace()} disabled={notionBusy !== null}>{notionBusy === 'setup' ? '만드는 중…' : 'Propaid 공간 만들기'}</button>}<a className="btn btn-secondary btn-sm" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer">Notion에서 열기</a><button className="btn btn-ghost btn-sm" onClick={() => void stopNotion()} disabled={notionBusy !== null}>{notionBusy === 'disconnect' ? '해제 중…' : '연결 해제'}</button></div></> : <button className="btn btn-primary" onClick={() => void startNotionConnect()} disabled={notionBusy !== null}>{notionBusy === 'connect' ? '연결 중…' : 'Notion 연결'}</button>}</div>
+          </article>
+          <article className="card integration-card integration-card-calendar">
+            <div className="integration-card-head">
+              <span className="integration-logo integration-logo-calendar" aria-hidden="true">31</span>
+              <div className="integration-title"><h3>Google Calendar</h3><p>초안·게시·입금 예정일을 Calendar에 등록합니다.</p></div>
+            </div>
+            <div className="integration-status-row">{google?.connected ? <span className="badge badge-saved">● Google Calendar 연결됨{google.email ? ` · ${google.email}` : ''}</span> : <span className="integration-status-off">연결 전</span>}</div>
+            <div className="integration-preview integration-calendar-preview" aria-hidden="true">
+              <span><i className="schedule-dot schedule-draft" />초안</span><span><i className="schedule-dot schedule-publish" />게시</span><span><i className="schedule-dot schedule-payment" />입금</span>
+            </div>
+            <div className="integration-flow"><span>일정 확인</span><i>→</i><span>직접 등록</span><i>→</i><span>Calendar 알림</span></div>
+            <div className="integration-actions">{google?.connected ? <div className="action-row"><a className="btn btn-secondary btn-sm" href="https://calendar.google.com" target="_blank" rel="noreferrer">Calendar 열기</a><button className="btn btn-ghost btn-sm" onClick={() => void stopGoogle()} disabled={googleBusy !== null}>{googleBusy === 'disconnect' ? '해제 중…' : '연결 해제'}</button></div> : <button className="btn btn-primary" onClick={() => void startGoogleConnect()} disabled={googleBusy !== null}>{googleBusy === 'connect' ? '연결 중…' : 'Google Calendar 연결'}</button>}</div>
+          </article>
+        </div>
       </section>
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-info">{notice}</div>}
