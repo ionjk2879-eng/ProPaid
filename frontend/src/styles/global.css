@@ -207,7 +207,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .editor { min-height: 310px; resize: vertical; line-height: 1.7; }
 .editor-footer { margin-top: 10px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .proposal-workspace { display: grid; gap: 18px; }
-.proposal-workspace-result { grid-template-columns: minmax(0, .95fr) minmax(480px, 1.2fr); align-items: start; }
+.proposal-workspace-result { grid-template-columns: minmax(0, 1fr) minmax(480px, 1fr); align-items: start; }
 .proposal-source-card, .proposal-result-card { min-width: 0; }
 .proposal-workspace-result .proposal-source-card { position: sticky; top: 18px; }
 .proposal-panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 16px; }
