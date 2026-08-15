@@ -1,6 +1,8 @@
 export interface Env {
   DB: D1Database;
   EVIDENCE_BUCKET?: R2Bucket;
+  BACKUP_BUCKET?: R2Bucket;
+  ADMIN_TOKEN?: string;
   JWT_SECRET: string;
   APP_ORIGIN: string;
   RESEND_RECEIVING_DOMAIN: string;

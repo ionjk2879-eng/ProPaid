@@ -25,6 +25,10 @@
     {
       "binding": "EVIDENCE_BUCKET",
       "bucket_name": "propaid-evidence"
+    },
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "propaid-backups"
     }
   ],
   "triggers": {

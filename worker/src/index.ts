@@ -21,7 +21,7 @@ app.use('*', async (c, next) => cors({
 })(c, next));
 
 app.use('/api/*', async (c, next) => {
-  if (c.req.path.startsWith('/api/auth/') || c.req.path === '/api/health' || c.req.path === '/api/webhooks/resend' || c.req.path === '/api/integrations/notion/callback' || c.req.path === '/api/integrations/google/callback' || c.req.method === 'OPTIONS') return next();
+  if (c.req.path.startsWith('/api/auth/') || c.req.path.startsWith('/api/admin/') || c.req.path === '/api/health' || c.req.path === '/api/webhooks/resend' || c.req.path === '/api/integrations/notion/callback' || c.req.path === '/api/integrations/google/callback' || c.req.method === 'OPTIONS') return next();
   const authorization = c.req.header('Authorization');
   const payload = authorization?.startsWith('Bearer ') ? await verifyToken(authorization.slice(7), c.env.JWT_SECRET) : null;
   if (!payload) return c.json({ message: '로그인이 필요합니다.' }, 401);
@@ -32,6 +32,32 @@ app.use('/api/*', async (c, next) => {
   const lastActiveStale = !user.last_active_at || Date.now() - new Date(user.last_active_at).getTime() > 60 * 60 * 1000;
   if (lastActiveStale) await c.env.DB.prepare('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').bind(user.id).run();
   return next();
+});
+
+// 관리자 백업 조회 API는 사용자 로그인과 무관하게 별도의 고정 토큰으로만 접근을 허용한다(복구 훈련 스크립트 전용).
+app.use('/api/admin/*', async (c, next) => {
+  const token = c.req.header('X-Admin-Token');
+  if (!c.env.ADMIN_TOKEN || !token || token !== c.env.ADMIN_TOKEN) return c.json({ message: '관리자 인증이 필요합니다.' }, 401);
+  return next();
+});
+
+app.get('/api/admin/backups', async (c) => {
+  if (!c.env.BACKUP_BUCKET) return c.json({ message: '백업 저장소가 설정되지 않았습니다.' }, 503);
+  const listed = await c.env.BACKUP_BUCKET.list({ prefix: 'd1/', delimiter: '/' });
+  const dates = (listed.delimitedPrefixes ?? [])
+    .map((prefix) => prefix.replace(/^d1\//, '').replace(/\/$/, ''))
+    .filter((value) => value !== 'latest')
+    .sort().reverse();
+  return c.json({ dates });
+});
+
+app.get('/api/admin/backups/:date/:table', async (c) => {
+  if (!c.env.BACKUP_BUCKET) return c.json({ message: '백업 저장소가 설정되지 않았습니다.' }, 503);
+  const { date, table } = c.req.param();
+  if (!/^(latest|\d{4}-\d{2}-\d{2})$/.test(date) || !/^[a-z_]+$/.test(table)) return c.json({ message: '잘못된 요청입니다.' }, 400);
+  const object = await c.env.BACKUP_BUCKET.get(`d1/${date}/${table}.json`);
+  if (!object) return c.json({ message: '백업을 찾을 수 없습니다.' }, 404);
+  return new Response(object.body, { headers: { 'Content-Type': 'application/json' } });
 });
 
 app.onError((error, c) => {

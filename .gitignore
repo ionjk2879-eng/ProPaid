@@ -17,6 +17,9 @@ frontend/.env.local
 worker/.dev.vars
 worker/node_modules/
 worker/.wrangler/
+worker/backups/
+worker/.wrangler-restore-drill/
+worker/.wrangler-restore-drill-data.sql
 
 ## OS / editor
 .idea/

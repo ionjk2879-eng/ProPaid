@@ -8,7 +8,10 @@
     "deploy": "npm run build:frontend && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:local": "wrangler d1 migrations apply propaid --local",
-    "db:remote": "wrangler d1 migrations apply propaid --remote"
+    "predb:remote": "node scripts/backup-d1.mjs",
+    "db:remote": "wrangler d1 migrations apply propaid --remote",
+    "backup:remote": "node scripts/backup-d1.mjs",
+    "restore:drill": "node scripts/restore-drill.mjs"
   },
   "dependencies": {
     "hono": "^4.9.2"

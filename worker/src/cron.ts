@@ -1,8 +1,11 @@
 import { DORMANT_AFTER_DAYS, INBOUND_REVIEW_RETENTION_DAYS, purgeUser } from './account';
+import { runDailyBackup } from './backup';
 import type { Env } from './types';
 
 /**
  * Daily maintenance sweep:
+ * 0. Exports every table to R2 (see backup.ts) before anything else runs, so accounts
+ *    that get purged below are still captured in that day's backup.
  * 1. Permanently deletes accounts whose withdrawal grace period has elapsed.
  * 2. Marks long-unused active accounts dormant and forces re-authentication
  *    (bumps token_version so any lingering JWTs stop working).
@@ -10,6 +13,9 @@ import type { Env } from './types';
  *    bounding how long unreviewed mail content is kept.
  */
 export async function runAccountMaintenance(env: Env): Promise<void> {
+  try { await runDailyBackup(env); }
+  catch (error) { console.error('일일 D1 백업 실패', error); }
+
   const now = new Date().toISOString();
 
   const due = await env.DB.prepare(
