@@ -47,6 +47,15 @@ export default function TurnstileWidget({ onVerify, onExpire }: TurnstileWidgetP
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState(false);
 
+  // onVerify/onExpire는 부모(ProposalPage)가 렌더링될 때마다 새로 만들어지는 함수라, 이걸
+  // effect의 의존성 배열에 그대로 넣으면 텍스트를 입력하거나 인증에 성공할 때마다(그 자체가
+  // 리렌더링을 유발함) 위젯이 파괴되고 다시 만들어지는 무한 루프가 생긴다("확인 중" 반복 깜빡임의 원인).
+  // ref에 최신 콜백을 담아두고, effect 자체는 siteKey가 바뀔 때만(사실상 최초 1회) 실행되게 한다.
+  const onVerifyRef = useRef(onVerify);
+  const onExpireRef = useRef(onExpire);
+  onVerifyRef.current = onVerify;
+  onExpireRef.current = onExpire;
+
   useEffect(() => {
     if (!siteKey || !containerRef.current) return;
     let widgetId: string | undefined;
@@ -56,9 +65,9 @@ export default function TurnstileWidget({ onVerify, onExpire }: TurnstileWidgetP
         if (cancelled || !containerRef.current || !window.turnstile) return;
         widgetId = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
-          callback: onVerify,
+          callback: (token) => onVerifyRef.current(token),
           'error-callback': () => setError(true),
-          'expired-callback': () => onExpire?.(),
+          'expired-callback': () => onExpireRef.current?.(),
         });
       })
       .catch(() => setError(true));
@@ -66,7 +75,7 @@ export default function TurnstileWidget({ onVerify, onExpire }: TurnstileWidgetP
       cancelled = true;
       if (widgetId && window.turnstile) window.turnstile.reset(widgetId);
     };
-  }, [siteKey, onVerify, onExpire]);
+  }, [siteKey]);
 
   if (!siteKey) return null;
   return (
