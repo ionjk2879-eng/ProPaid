@@ -7,11 +7,12 @@ interface AnalysisResultProps {
   saving: boolean;
   saved: boolean;
   onChange: (result: ProposalAnalysis) => void;
-  onSave: () => void;
+  onSave: (keepRawText: boolean) => void;
 }
 
 export default function AnalysisResult({ result, saving, saved, onChange, onSave }: AnalysisResultProps) {
   const [editing, setEditing] = useState(false);
+  const [keepRawText, setKeepRawText] = useState(false);
   const update = <K extends keyof ProposalAnalysis>(key: K, value: ProposalAnalysis[K]) => onChange({ ...result, [key]: value });
   const missing = [...result.risks, ...result.warnings.map((warning) => warning.replace(/^확인 필요:\s*/, ''))]
     .filter((value) => !(result.revisionCount != null && value.includes('수정 횟수')))
@@ -58,10 +59,16 @@ export default function AnalysisResult({ result, saving, saved, onChange, onSave
         <EditableList title="해야 할 일" values={result.tasks} editing={editing} empty="자동 생성된 할 일이 없음" onChange={(values) => update('tasks', values)} />
       </div>
 
+      {!saved && (
+        <label className="helper" style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4 }}>
+          <input type="checkbox" checked={keepRawText} onChange={(event) => setKeepRawText(event.target.checked)} style={{ width: 'auto' }} />
+          원문 메일도 함께 보관 (선택하지 않으면 구조화된 정보만 저장되고 원문은 보관되지 않습니다)
+        </label>
+      )}
       <div className={`proposal-result-actions${saved ? ' proposal-result-actions-saved' : ''}`}>
         <div className="proposal-result-actions-group">
           <button className="btn btn-secondary" type="button" onClick={() => setEditing((value) => !value)}>{editing ? '수정 완료' : '결과 수정'}</button>
-          <button className="btn btn-primary" onClick={onSave} disabled={saving || saved}>{saved ? '✓ 거래로 저장됨' : saving ? '저장 중…' : '확인 후 거래로 저장'}</button>
+          <button className="btn btn-primary" onClick={() => onSave(keepRawText)} disabled={saving || saved}>{saved ? '✓ 거래로 저장됨' : saving ? '저장 중…' : '확인 후 거래로 저장'}</button>
         </div>
         {saved && <Link to="/deals" className="btn btn-primary">거래 관리로 이동</Link>}
       </div>

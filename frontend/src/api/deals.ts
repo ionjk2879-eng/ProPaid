@@ -35,11 +35,11 @@ export async function fetchDeals(): Promise<Deal[]> {
   return (await apiClient.get<Deal[]>('/deals')).data;
 }
 
-export async function createDeal(analysis: ProposalAnalysis, rawText: string): Promise<Deal> {
+export async function createDeal(analysis: ProposalAnalysis, rawText: string, keepRawText: boolean): Promise<Deal> {
   const { client, dealType, amount, deliverables, draftDueDate, publishDueDate, revisionCount,
     secondaryUsage, paymentCondition, tasks, risks } = analysis;
   return (await apiClient.post<Deal>('/deals', { client, dealType, amount, deliverables, draftDueDate,
-    publishDueDate, revisionCount, secondaryUsage, paymentCondition, tasks, risks, rawText })).data;
+    publishDueDate, revisionCount, secondaryUsage, paymentCondition, tasks, risks, rawText, keepRawText })).data;
 }
 
 export async function updateDealStatus(id: number, status: DealStatus): Promise<Deal> {

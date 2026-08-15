@@ -26,5 +26,8 @@
       "binding": "EVIDENCE_BUCKET",
       "bucket_name": "propaid-evidence"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 18 * * *"]
+  }
 }

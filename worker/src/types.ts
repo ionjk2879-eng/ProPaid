@@ -22,6 +22,11 @@ export interface UserRow {
   email: string;
   nickname: string;
   inbox_token: string;
+  token_version: number;
+  status: 'active' | 'pending_deletion' | 'dormant';
+  deletion_scheduled_at: string | null;
+  last_active_at: string | null;
+  created_at: string;
 }
 
 export type Variables = { user: UserRow };

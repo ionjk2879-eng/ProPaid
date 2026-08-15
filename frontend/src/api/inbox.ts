@@ -22,8 +22,8 @@ export async function fetchInboxMessages(): Promise<InboxMessage[]> {
   return (await apiClient.get<InboxMessage[]>('/inbox/messages')).data;
 }
 
-export async function saveInboxMessage(id: number): Promise<void> {
-  await apiClient.post(`/inbox/messages/${id}/save`);
+export async function saveInboxMessage(id: number, keepRawText: boolean): Promise<void> {
+  await apiClient.post(`/inbox/messages/${id}/save`, { keepRawText });
 }
 
 export async function updateInboxAnalysis(id: number, analysis: ProposalAnalysis): Promise<ProposalAnalysis> {

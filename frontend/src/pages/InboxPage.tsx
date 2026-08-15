@@ -15,6 +15,7 @@ export default function InboxPage() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<ProposalAnalysis | null>(null);
+  const [keepRawTextIds, setKeepRawTextIds] = useState<Record<number, boolean>>({});
 
   const load = async () => {
     try {
@@ -52,7 +53,7 @@ export default function InboxPage() {
     setSavingId(id);
     setError(null);
     try {
-      await saveInboxMessage(id);
+      await saveInboxMessage(id, keepRawTextIds[id] ?? false);
       setMessages((items) => items.map((item) => item.id === id ? { ...item, status: 'SAVED' } : item));
     } catch {
       setError('거래 저장에 실패했습니다.');
@@ -142,12 +143,20 @@ export default function InboxPage() {
             ) : (
               <><div className="message-analysis"><div className="analysis-value"><small>거래처</small><strong>{message.analysis.client || '확인 필요'}</strong></div><div className="analysis-value"><small>제안 금액</small><strong>{message.analysis.amount == null ? '확인 필요' : `${message.analysis.amount.toLocaleString()}원`}</strong>{message.analysis.amount != null && <WithholdingBadge amount={message.analysis.amount} />}</div></div>{!!message.analysis.risks.length && <div className="alert alert-warning">확인 항목 · {message.analysis.risks.join(' · ')}</div>}</>
             )}
-            {message.status === 'FAILED' ? <div className="action-row"><button className="btn btn-primary" onClick={() => void retry(message.id)} disabled={savingId === message.id}>{savingId === message.id ? '재처리 중…' : '메일 재처리'}</button></div> : <div className="action-row">
-              <button className="btn btn-secondary" onClick={() => startEditing(message)} disabled={message.status === 'SAVED' || editingId === message.id}>분석 수정</button>
-              <button className="btn btn-primary" onClick={() => void saveAsDeal(message.id)} disabled={message.status === 'SAVED' || savingId === message.id || editingId === message.id}>
-                {message.status === 'SAVED' ? '거래 저장됨' : savingId === message.id ? '저장 중…' : '이 분석으로 거래 저장'}
-              </button>
-            </div>}
+            {message.status === 'FAILED' ? <div className="action-row"><button className="btn btn-primary" onClick={() => void retry(message.id)} disabled={savingId === message.id}>{savingId === message.id ? '재처리 중…' : '메일 재처리'}</button></div> : <>
+              {message.status !== 'SAVED' && (
+                <label className="helper" style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 10 }}>
+                  <input type="checkbox" checked={keepRawTextIds[message.id] ?? false} onChange={(event) => setKeepRawTextIds((current) => ({ ...current, [message.id]: event.target.checked }))} style={{ width: 'auto' }} />
+                  원문 메일도 함께 보관 (선택하지 않으면 구조화된 정보만 저장되고 원문은 보관되지 않습니다)
+                </label>
+              )}
+              <div className="action-row" style={{ marginTop: 10 }}>
+                <button className="btn btn-secondary" onClick={() => startEditing(message)} disabled={message.status === 'SAVED' || editingId === message.id}>분석 수정</button>
+                <button className="btn btn-primary" onClick={() => void saveAsDeal(message.id)} disabled={message.status === 'SAVED' || savingId === message.id || editingId === message.id}>
+                  {message.status === 'SAVED' ? '거래 저장됨' : savingId === message.id ? '저장 중…' : '이 분석으로 거래 저장'}
+                </button>
+              </div>
+            </>}
           </div></article>
         ))}
       </div>

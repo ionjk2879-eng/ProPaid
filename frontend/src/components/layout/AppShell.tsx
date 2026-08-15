@@ -7,9 +7,10 @@ const navigation = [
   { to: '/deals', icon: '▦', label: '거래 관리' },
   { to: '/proposals', icon: '✦', label: '직접 분석' },
   { to: '/dashboard', icon: '◫', label: '재무 관리' },
+  { to: '/settings', icon: '⚙', label: '설정' },
 ];
 
-const pageNames: Record<string, string> = { '/inbox': '받은 제안', '/deals': '거래 관리', '/proposals': '직접 분석', '/dashboard': '재무 관리' };
+const pageNames: Record<string, string> = { '/inbox': '받은 제안', '/deals': '거래 관리', '/proposals': '직접 분석', '/dashboard': '재무 관리', '/settings': '설정' };
 
 export default function AppShell() {
   const { nickname, logout } = useAuth();
@@ -45,6 +46,7 @@ export default function AppShell() {
         </nav>
         <div className="sidebar-user">
           <div className="user-name">{nickname || 'Propaid 사용자'}</div><div className="user-plan">FREE workspace</div>
+          <NavLink className="logout-button" to="/settings" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>설정</NavLink>
           <button className="logout-button" onClick={() => { logout(); navigate('/login'); }}>로그아웃</button>
         </div>
       </aside>

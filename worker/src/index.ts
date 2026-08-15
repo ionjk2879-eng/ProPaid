@@ -6,6 +6,8 @@ import { body, dealResponse, expenseResponse, getUser, subscriptionResponse, typ
 import { createToken, hashPassword, randomToken, verifyToken } from './security';
 import { createNotionState, decryptNotionToken, encryptNotionToken, notionAppOrigin, notionHeaders, notionRedirectUri, verifyNotionState } from './notion';
 import { createGoogleLoginState, createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleLoginRedirectUri, googleRedirectUri, verifyGoogleLoginState, verifyGoogleState, type GoogleConnection } from './google';
+import { DELETION_GRACE_DAYS, purgeUser, scheduledDeletionAt } from './account';
+import { runAccountMaintenance } from './cron';
 import type { Env, UserRow, Variables } from './types';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -21,11 +23,14 @@ app.use('*', async (c, next) => cors({
 app.use('/api/*', async (c, next) => {
   if (c.req.path.startsWith('/api/auth/') || c.req.path === '/api/health' || c.req.path === '/api/webhooks/resend' || c.req.path === '/api/integrations/notion/callback' || c.req.path === '/api/integrations/google/callback' || c.req.method === 'OPTIONS') return next();
   const authorization = c.req.header('Authorization');
-  const userId = authorization?.startsWith('Bearer ') ? await verifyToken(authorization.slice(7), c.env.JWT_SECRET) : null;
-  if (!userId) return c.json({ message: '로그인이 필요합니다.' }, 401);
-  const user = await c.env.DB.prepare('SELECT id, email, nickname, inbox_token FROM users WHERE id = ?').bind(userId).first<UserRow>();
+  const payload = authorization?.startsWith('Bearer ') ? await verifyToken(authorization.slice(7), c.env.JWT_SECRET) : null;
+  if (!payload) return c.json({ message: '로그인이 필요합니다.' }, 401);
+  const user = await c.env.DB.prepare('SELECT id, email, nickname, inbox_token, token_version, status, deletion_scheduled_at, last_active_at, created_at FROM users WHERE id = ?').bind(payload.userId).first<UserRow>();
   if (!user) return c.json({ message: '사용자를 찾을 수 없습니다.' }, 401);
+  if (user.token_version !== payload.tokenVersion) return c.json({ message: '세션이 만료되었습니다. 다시 로그인해주세요.' }, 401);
   c.set('user', user);
+  const lastActiveStale = !user.last_active_at || Date.now() - new Date(user.last_active_at).getTime() > 60 * 60 * 1000;
+  if (lastActiveStale) await c.env.DB.prepare('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?').bind(user.id).run();
   return next();
 });
 
@@ -82,18 +87,18 @@ app.get('/api/auth/google/callback', async (c) => {
       throw new Error('검증된 Google 이메일을 확인하지 못했습니다.');
     }
 
-    let user = await c.env.DB.prepare(`SELECT u.id, u.nickname FROM auth_identities i
+    let user = await c.env.DB.prepare(`SELECT u.id, u.nickname, u.token_version, u.status FROM auth_identities i
       JOIN users u ON u.id = i.user_id WHERE i.provider = 'google' AND i.provider_user_id = ?`)
-      .bind(profile.sub).first<{ id: number; nickname: string }>();
+      .bind(profile.sub).first<{ id: number; nickname: string; token_version: number; status: string }>();
     if (!user) {
-      user = await c.env.DB.prepare('SELECT id, nickname FROM users WHERE email = ?')
-        .bind(email).first<{ id: number; nickname: string }>();
+      user = await c.env.DB.prepare('SELECT id, nickname, token_version, status FROM users WHERE email = ?')
+        .bind(email).first<{ id: number; nickname: string; token_version: number; status: string }>();
       if (!user) {
         const nickname = profile.name?.trim().slice(0, 40) || email.split('@')[0];
         const result = await c.env.DB.prepare(
           'INSERT INTO users (email, password_hash, nickname, inbox_token) VALUES (?, ?, ?, ?)'
         ).bind(email, await hashPassword(randomToken(32)), nickname, randomToken()).run();
-        user = { id: Number(result.meta.last_row_id), nickname };
+        user = { id: Number(result.meta.last_row_id), nickname, token_version: 1, status: 'active' };
         await c.env.DB.prepare('INSERT INTO user_plans (user_id) VALUES (?)').bind(user.id).run();
       }
       await c.env.DB.prepare(`INSERT INTO auth_identities (user_id, provider, provider_user_id, provider_email)
@@ -105,12 +110,98 @@ app.get('/api/auth/google/callback', async (c) => {
         WHERE provider = 'google' AND provider_user_id = ?`).bind(email, profile.sub).run();
     }
 
-    const accessToken = await createToken(user.id, c.env.JWT_SECRET);
-    return c.redirect(`${origin}/auth/google/callback#access_token=${encodeURIComponent(accessToken)}&nickname=${encodeURIComponent(user.nickname)}`);
+    // 탈퇴 유예 기간 중 재로그인하면 삭제를 취소하고 계정을 복구한다. 휴면 계정은 다시 활성 상태로 되돌린다.
+    let restored = false;
+    if (user.status === 'pending_deletion') {
+      await c.env.DB.prepare("UPDATE users SET status = 'active', deletion_scheduled_at = NULL WHERE id = ?").bind(user.id).run();
+      restored = true;
+    } else if (user.status === 'dormant') {
+      await c.env.DB.prepare("UPDATE users SET status = 'active' WHERE id = ?").bind(user.id).run();
+    }
+
+    const accessToken = await createToken(user.id, c.env.JWT_SECRET, user.token_version);
+    return c.redirect(`${origin}/auth/google/callback#access_token=${encodeURIComponent(accessToken)}&nickname=${encodeURIComponent(user.nickname)}${restored ? '&restored=1' : ''}`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : 'Google 로그인 처리 실패');
     return loginError('error');
   }
+});
+
+app.get('/api/account/summary', async (c) => {
+  const user = getUser(c as AppContext);
+  const db = c.env.DB;
+  const [deals, expenses, subscriptions, evidenceFiles, notion, google, plan, identities] = await Promise.all([
+    db.prepare('SELECT COUNT(*) AS n FROM deals WHERE user_id = ?').bind(user.id).first<{ n: number }>(),
+    db.prepare('SELECT COUNT(*) AS n FROM expenses WHERE user_id = ?').bind(user.id).first<{ n: number }>(),
+    db.prepare('SELECT COUNT(*) AS n FROM subscriptions WHERE user_id = ?').bind(user.id).first<{ n: number }>(),
+    db.prepare('SELECT COUNT(*) AS n FROM expenses WHERE user_id = ? AND evidence_object_key IS NOT NULL').bind(user.id).first<{ n: number }>(),
+    db.prepare('SELECT workspace_name FROM notion_connections WHERE user_id = ?').bind(user.id).first<{ workspace_name: string | null }>(),
+    db.prepare('SELECT google_email FROM google_connections WHERE user_id = ?').bind(user.id).first<{ google_email: string | null }>(),
+    db.prepare('SELECT plan_type FROM user_plans WHERE user_id = ?').bind(user.id).first<{ plan_type: string }>(),
+    db.prepare("SELECT COUNT(*) AS n FROM auth_identities WHERE user_id = ?").bind(user.id).first<{ n: number }>(),
+  ]);
+  return c.json({
+    email: user.email, nickname: user.nickname, createdAt: user.created_at,
+    planType: plan?.plan_type ?? 'FREE', status: user.status, deletionScheduledAt: user.deletion_scheduled_at,
+    dataScope: { deals: deals?.n ?? 0, expenses: expenses?.n ?? 0, subscriptions: subscriptions?.n ?? 0, evidenceFiles: evidenceFiles?.n ?? 0 },
+    integrations: { notion: Boolean(notion), notionWorkspace: notion?.workspace_name ?? null, googleCalendar: Boolean(google), googleCalendarEmail: google?.google_email ?? null },
+    // Google 로그인은 유일한 인증 수단이라 단독 해제를 허용하지 않는다. 해제하려면 회원 탈퇴가 필요하다.
+    soleLoginProvider: (identities?.n ?? 0) <= 1,
+    graceDays: DELETION_GRACE_DAYS,
+  });
+});
+
+app.get('/api/account/export', async (c) => {
+  const user = getUser(c as AppContext);
+  const db = c.env.DB;
+  const [dealRows, expenseRows, subscriptionRows, inboundRows, notion, google, plan] = await Promise.all([
+    db.prepare('SELECT * FROM deals WHERE user_id = ? ORDER BY created_at').bind(user.id).all(),
+    db.prepare('SELECT e.*, d.client AS deal_client FROM expenses e LEFT JOIN deals d ON d.id = e.deal_id WHERE e.user_id = ? ORDER BY e.created_at').bind(user.id).all(),
+    db.prepare('SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at').bind(user.id).all(),
+    db.prepare('SELECT resend_email_id, sender, recipient, subject, text_body, analysis, status, created_at FROM inbound_emails WHERE user_id = ? ORDER BY created_at').bind(user.id).all(),
+    db.prepare('SELECT workspace_name, root_page_url, setup_at, updated_at FROM notion_connections WHERE user_id = ?').bind(user.id).first<Record<string, unknown>>(),
+    db.prepare('SELECT google_email, updated_at FROM google_connections WHERE user_id = ?').bind(user.id).first<Record<string, unknown>>(),
+    db.prepare('SELECT plan_type, expires_at FROM user_plans WHERE user_id = ?').bind(user.id).first<Record<string, unknown>>(),
+  ]);
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    account: { email: user.email, nickname: user.nickname, createdAt: user.created_at, planType: plan?.plan_type ?? 'FREE', planExpiresAt: plan?.expires_at ?? null },
+    integrations: {
+      notion: notion ? { workspaceName: notion.workspace_name, rootPageUrl: notion.root_page_url, connectedAt: notion.setup_at ?? notion.updated_at } : null,
+      googleCalendar: google ? { email: google.google_email, connectedAt: google.updated_at } : null,
+    },
+    deals: dealRows.results.map((row) => dealResponse(row as Record<string, unknown>)),
+    expenses: expenseRows.results.map((row) => expenseResponse(row as Record<string, unknown>)),
+    subscriptions: subscriptionRows.results.map((row) => subscriptionResponse(row as Record<string, unknown>)),
+    receivedProposalEmails: inboundRows.results.map((row) => {
+      const record = row as Record<string, unknown>;
+      let analysis: unknown = null;
+      try { analysis = JSON.parse(String(record.analysis ?? 'null')); } catch { analysis = null; }
+      return { resendEmailId: record.resend_email_id, sender: record.sender, recipient: record.recipient,
+        subject: record.subject, textBody: record.text_body, analysis, status: record.status, createdAt: record.created_at };
+    }),
+  };
+  return new Response(JSON.stringify(payload, null, 2), {
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="propaid-account-data.json"' },
+  });
+});
+
+app.post('/api/account/sessions/revoke', async (c) => {
+  await c.env.DB.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').bind(getUser(c as AppContext).id).run();
+  return c.json({ status: 'revoked' });
+});
+
+app.post('/api/account/delete', async (c) => {
+  const user = getUser(c as AppContext);
+  const input = await body<{ immediate?: boolean }>(c as AppContext).catch(() => ({ immediate: false }));
+  if (input.immediate) {
+    await purgeUser(c.env, user.id);
+    return c.json({ status: 'deleted' });
+  }
+  const scheduledAt = scheduledDeletionAt();
+  await c.env.DB.prepare("UPDATE users SET status = 'pending_deletion', deletion_scheduled_at = ?, token_version = token_version + 1 WHERE id = ?")
+    .bind(scheduledAt, user.id).run();
+  return c.json({ status: 'pending_deletion', deletionScheduledAt: scheduledAt, graceDays: DELETION_GRACE_DAYS });
 });
 
 app.get('/api/integrations/notion/status', async (c) => {
@@ -408,13 +499,15 @@ app.get('/api/deals', async (c) => {
 app.post('/api/deals', async (c) => {
   const input = await body<Record<string, unknown>>(c as AppContext);
   if (!String(input.rawText ?? '').trim()) return c.json({ message: '원문이 필요합니다.' }, 400);
+  // 원문은 사용자가 명시적으로 보관을 선택한 경우에만 저장하고, 그 외에는 구조화된 필드만 남긴다.
+  const keepRawText = input.keepRawText === true;
   const result = await c.env.DB.prepare(`INSERT INTO deals
     (user_id, client, deal_type, amount, deliverables, draft_due_date, publish_due_date, revision_count,
      secondary_usage, payment_condition, tasks, risks, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(getUser(c as AppContext).id, input.client ?? null, input.dealType ?? null, input.amount ?? null,
       JSON.stringify(input.deliverables ?? []), input.draftDueDate ?? null, input.publishDueDate ?? null,
       input.revisionCount ?? null, input.secondaryUsage ?? null, input.paymentCondition ?? null,
-      JSON.stringify(input.tasks ?? []), JSON.stringify(input.risks ?? []), input.rawText).run();
+      JSON.stringify(input.tasks ?? []), JSON.stringify(input.risks ?? []), keepRawText ? input.rawText : '').run();
   const row = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ?').bind(result.meta.last_row_id).first<Record<string, unknown>>();
   return c.json(dealResponse(row!), 201);
 });
@@ -513,7 +606,7 @@ app.post('/api/deals/:id/notion', async (c) => {
     paragraph('초안 기한', deal.draft_due_date), paragraph('게시 기한', deal.publish_due_date), paragraph('입금 예정일', deal.payment_due_date),
     paragraph('수정 횟수', deal.revision_count), paragraph('2차 활용', deal.secondary_usage), paragraph('지급 조건', deal.payment_condition),
     list('작업물', deal.deliverables), list('체크리스트', deal.tasks), list('확인 위험', deal.risks),
-    { object: 'block', type: 'divider', divider: {} }, paragraph('원문', String(deal.raw_text || '').slice(0, 1900)),
+    ...(deal.raw_text ? [{ object: 'block', type: 'divider', divider: {} }, paragraph('원문', String(deal.raw_text).slice(0, 1900))] : []),
   ];
   const dateProperty = (value: unknown) => value ? { date: { start: String(value) } } : undefined;
   let accessToken = await decryptNotionToken(connection.access_token_encrypted, c.env.JWT_SECRET);
@@ -711,6 +804,7 @@ app.patch('/api/inbox/messages/:id/analysis', async (c) => {
 
 app.post('/api/inbox/messages/:id/save', async (c) => {
   const user = getUser(c as AppContext);
+  const input = await body<{ keepRawText?: boolean }>(c as AppContext).catch(() => ({ keepRawText: false }));
   const message = await c.env.DB.prepare(
     'SELECT id, resend_email_id, text_body, analysis, status FROM inbound_emails WHERE id = ? AND user_id = ?'
   ).bind(Number(c.req.param('id')), user.id).first<{ id: number; resend_email_id: string; text_body: string; analysis: string; status: string }>();
@@ -719,15 +813,17 @@ app.post('/api/inbox/messages/:id/save', async (c) => {
     .bind(message.resend_email_id, user.id).first<Record<string, unknown>>();
   if (existing) return c.json(dealResponse(existing));
   const analysis = JSON.parse(message.analysis) as ProposalAnalysis;
-  const insert = await c.env.DB.prepare(`INSERT INTO deals
+  // 원문은 사용자가 명시적으로 보관을 선택한 경우에만 거래로 옮겨 담고, 받은 메일함의 원문은 결정이 끝났으므로 항상 비운다.
+  const keepRawText = input.keepRawText === true;
+  const insert = c.env.DB.prepare(`INSERT INTO deals
     (user_id, client, deal_type, amount, deliverables, draft_due_date, publish_due_date, revision_count,
      secondary_usage, payment_condition, tasks, risks, raw_text, source_email_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(user.id, analysis.client, analysis.dealType, analysis.amount, JSON.stringify(analysis.deliverables),
       analysis.draftDueDate, analysis.publishDueDate, analysis.revisionCount, analysis.secondaryUsage,
       analysis.paymentCondition, JSON.stringify(analysis.tasks), JSON.stringify(analysis.risks),
-      message.text_body, message.resend_email_id);
-  const update = c.env.DB.prepare("UPDATE inbound_emails SET status = 'SAVED' WHERE id = ? AND user_id = ?")
+      keepRawText ? message.text_body : '', message.resend_email_id);
+  const update = c.env.DB.prepare("UPDATE inbound_emails SET status = 'SAVED', text_body = '' WHERE id = ? AND user_id = ?")
     .bind(message.id, user.id);
   const [created] = await c.env.DB.batch([insert, update]);
   const row = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ?').bind(created.meta.last_row_id).first<Record<string, unknown>>();
@@ -876,4 +972,9 @@ async function verifyWebhook(payload: string, headers: Headers, secret: string):
   } catch { return false; }
 }
 
-export default app;
+export default {
+  fetch: app.fetch,
+  scheduled: async (_event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(runAccountMaintenance(env));
+  },
+};

@@ -34,11 +34,11 @@ export default function ProposalPage() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (keepRawText: boolean) => {
     if (!result) return;
     setSaving(true);
     setError(null);
-    try { await createDeal(result, text); setSaved(true); }
+    try { await createDeal(result, text, keepRawText); setSaved(true); }
     catch { setError('거래 저장에 실패했습니다.'); }
     finally { setSaving(false); }
   };

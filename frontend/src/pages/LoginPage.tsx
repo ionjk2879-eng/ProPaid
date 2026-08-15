@@ -1,9 +1,14 @@
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { getGoogleLoginUrl } from '../api/auth';
 
 export default function LoginPage() {
+  const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const deleted = searchParams.get('deleted');
+  const revoked = searchParams.get('revoked');
+  const graceDays = searchParams.get('graceDays');
 
   const handleGoogleLogin = async () => {
     setError(null);
@@ -26,7 +31,11 @@ export default function LoginPage() {
           {googleLoading ? 'Google로 이동 중…' : 'Google로 계속하기'}
         </button>
         {error && <div className="alert alert-error">{error}</div>}
+        {revoked && <div className="alert alert-info">모든 기기에서 로그아웃되었습니다. 다시 로그인해주세요.</div>}
+        {deleted === 'now' && <div className="alert alert-info">계정과 모든 데이터가 즉시 삭제되었습니다.</div>}
+        {deleted === 'pending' && <div className="alert alert-info">탈퇴가 접수되었습니다. {graceDays ?? 14}일 이내에 같은 Google 계정으로 다시 로그인하면 탈퇴가 취소되고 계정이 복구됩니다. 이후에는 데이터가 영구적으로 삭제됩니다.</div>}
         <p className="google-login-note">Google에서 확인된 이메일로 기존 데이터가 안전하게 연결됩니다.</p>
+        <p className="google-login-note"><Link to="/privacy">개인정보 처리방침</Link></p>
       </div></section>
       <aside className="auth-visual"><p className="eyebrow">SMART DEAL WORKSPACE</p><h2>메일 속 제안을<br />실제 수익으로 연결하세요.</h2><p>흩어진 협찬과 외주 메일을 한곳에 모으고, 놓치기 쉬운 조건과 일정을 Propaid이 정리합니다.</p><div className="auth-steps"><span className="auth-step">01 메일 전달</span><span className="auth-step">02 조건 확인</span><span className="auth-step">03 거래 관리</span><span className="auth-step">04 입금 완료</span></div></aside>
     </div>

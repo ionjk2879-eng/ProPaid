@@ -26,21 +26,24 @@ async function jwtKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
 
-export async function createToken(userId: number, secret: string): Promise<string> {
+export async function createToken(userId: number, secret: string, tokenVersion: number): Promise<string> {
   const header = base64Url(encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
-  const payload = base64Url(encoder.encode(JSON.stringify({ sub: String(userId), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 })));
+  const payload = base64Url(encoder.encode(JSON.stringify({ sub: String(userId), tv: tokenVersion, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 })));
   const signature = await crypto.subtle.sign('HMAC', await jwtKey(secret), encoder.encode(`${header}.${payload}`));
   return `${header}.${payload}.${base64Url(new Uint8Array(signature))}`;
 }
 
-export async function verifyToken(token: string, secret: string): Promise<number | null> {
+export interface TokenPayload { userId: number; tokenVersion: number }
+
+export async function verifyToken(token: string, secret: string): Promise<TokenPayload | null> {
   const [header, payload, signature] = token.split('.');
   if (!header || !payload || !signature) return null;
   const valid = await crypto.subtle.verify('HMAC', await jwtKey(secret), decodeBase64Url(signature), encoder.encode(`${header}.${payload}`));
   if (!valid) return null;
   try {
-    const data = JSON.parse(new TextDecoder().decode(decodeBase64Url(payload))) as { sub: string; exp: number };
-    return data.exp > Date.now() / 1000 ? Number(data.sub) : null;
+    const data = JSON.parse(new TextDecoder().decode(decodeBase64Url(payload))) as { sub: string; tv?: number; exp: number };
+    if (data.exp <= Date.now() / 1000) return null;
+    return { userId: Number(data.sub), tokenVersion: data.tv ?? 1 };
   } catch { return null; }
 }
 
