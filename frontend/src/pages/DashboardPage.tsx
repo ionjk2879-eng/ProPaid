@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
 import { fetchDeals, type Deal } from '../api/deals';
 import { createExpense, deleteExpense, downloadExpenseEvidence, downloadFinanceCsv, fetchExpenses, fetchFinanceSummary, uploadExpenseEvidence, type DeductionStatus, type EvidenceType, type Expense, type FinanceSummary } from '../api/finance';
@@ -14,6 +14,42 @@ const deductionLabels: Record<DeductionStatus, string> = { REVIEW: '검토 필�
 
 function errorText(error: unknown, fallback: string) {
   return isAxiosError(error) ? error.response?.data?.message ?? fallback : fallback;
+}
+
+function formatWon(value: number) {
+  return `${value.toLocaleString('ko-KR')}원`;
+}
+
+function FinanceTrend({ months }: { months: FinanceSummary['months'] }) {
+  const maxValue = Math.max(1, ...months.flatMap((month) => [month.income, month.expense, Math.max(0, month.profit)]));
+
+  return (
+    <div className="finance-trend" role="img" aria-label="최근 6개월 수입, 업무 비용, 순수익 차트">
+      <div className="finance-chart-legend" aria-hidden="true">
+        <span><i className="legend-income" />수입</span>
+        <span><i className="legend-expense" />업무 비용</span>
+        <span><i className="legend-profit" />순수익</span>
+      </div>
+      <div className="finance-chart-plot">
+        <div className="finance-chart-grid" aria-hidden="true"><span /><span /><span /><span /></div>
+        {months.map((month) => {
+          const incomeHeight = Math.max(2, (month.income / maxValue) * 100);
+          const expenseHeight = Math.max(2, (month.expense / maxValue) * 100);
+          const profitHeight = Math.max(2, (Math.max(0, month.profit) / maxValue) * 100);
+          return (
+            <div className="finance-chart-month" key={month.month}>
+              <div className="finance-chart-bars">
+                <span className="finance-bar finance-bar-income" style={{ height: `${incomeHeight}%` }} title={`수입 ${formatWon(month.income)}`} />
+                <span className="finance-bar finance-bar-expense" style={{ height: `${expenseHeight}%` }} title={`업무 비용 ${formatWon(month.expense)}`} />
+                <span className="finance-profit-dot" style={{ bottom: `${profitHeight}%` }} title={`순수익 ${formatWon(month.profit)}`} />
+              </div>
+              <strong>{month.month}</strong>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
@@ -92,18 +128,36 @@ export default function DashboardPage() {
 
   return (
     <>
-      <header className="page-header"><div><p className="eyebrow">FINANCE WORKSPACE</p><h1 className="page-title">재무 관리</h1><p className="page-description">입금된 외주·협찬 수입과 업무 비용을 연결해 실제 손익과 증빙 준비 상태를 확인하세요.</p></div><button className="btn btn-secondary" onClick={exportCsv} disabled={downloading}>{downloading ? '생성 중…' : '통합 CSV 내보내기'}</button></header>
+      <header className="page-header"><div><p className="eyebrow">FINANCE WORKSPACE</p><h1 className="page-title">입금부터 비용까지, 실제 수익을 한눈에</h1><p className="page-description">입금된 거래 수입과 업무 비용을 연결해 실제 손익과 증빙 준비 상태를 확인하세요.</p></div><button className="btn btn-secondary" onClick={exportCsv} disabled={downloading}>⇩ {downloading ? '생성 중…' : '통합 CSV 내보내기'}</button></header>
       <div className="alert alert-info">공제 상태는 신고 준비를 위한 분류입니다. 실제 공제 가능 여부는 증빙과 업무 관련성을 기준으로 최종 확인하세요.</div>
       {error && <div className="alert alert-error">{error}</div>}
 
       <section className="finance-metrics">
-        <div className="card metric-card"><div className="metric-label">입금 완료 수입</div><div className="metric-value">{(summary?.realizedIncome ?? 0).toLocaleString()}원</div><div className="metric-note">거래 관리의 입금 완료 기준</div></div>
-        <div className="card metric-card"><div className="metric-label">업무 비용</div><div className="metric-value">{(summary?.realizedBusinessExpense ?? 0).toLocaleString()}원</div><div className="metric-note">업무 사용 비율 반영</div></div>
-        <div className="card metric-card metric-highlight"><div className="metric-label">현재 순수익</div><div className="metric-value">{(summary?.netProfit ?? 0).toLocaleString()}원</div><div className="metric-note">입금 수입 − 등록 비용</div></div>
-        <div className="card metric-card"><div className="metric-label">공제 후보</div><div className="metric-value">{(summary?.deductionCandidate ?? 0).toLocaleString()}원</div><div className="metric-note">검토 대기 {summary?.reviewCount ?? 0}건 · 월 구독 {(summary?.monthlyRecurringExpense ?? 0).toLocaleString()}원</div></div>
+        <div className="card metric-card"><div className="metric-label">입금 완료 수입</div><div className="metric-value">{formatWon(summary?.realizedIncome ?? 0)}</div><div className="metric-note">거래 관리의 입금 완료 기준</div></div>
+        <div className="card metric-card"><div className="metric-label">업무 비용</div><div className="metric-value">{formatWon(summary?.realizedBusinessExpense ?? 0)}</div><div className="metric-note">업무 사용 비율 반영</div></div>
+        <div className="card metric-card metric-highlight"><div className="metric-label">현재 순수익</div><div className="metric-value">{formatWon(summary?.netProfit ?? 0)}</div><div className="metric-note">입금 수입 − 등록 비용</div></div>
+        <div className="card metric-card"><div className="metric-label">월 반복 비용</div><div className="metric-value">{formatWon(summary?.monthlyRecurringExpense ?? 0)}</div><div className="metric-note">업무용 구독의 월 환산 금액</div></div>
       </section>
 
-      <section className="card" style={{ marginTop: 20 }}><div className="card-header"><div><h2 className="card-title">최근 6개월 손익</h2><p className="card-copy">입금일과 비용 사용일을 기준으로 집계합니다.</p></div></div><div className="card-body"><div className="table-wrap"><table className="data-table"><thead><tr><th>월</th><th>수입</th><th>업무 비용</th><th>순수익</th></tr></thead><tbody>{summary?.months.map((month) => <tr key={month.month}><td>{month.month}</td><td>{month.income.toLocaleString()}원</td><td>{month.expense.toLocaleString()}원</td><td className={month.profit < 0 ? 'amount-negative' : 'amount-positive'}>{month.profit.toLocaleString()}원</td></tr>)}</tbody></table></div></div></section>
+      <section className="finance-overview">
+        <div className="card finance-chart-card">
+          <div className="card-header"><div><h2 className="card-title">최근 6개월 손익</h2><p className="card-copy">입금일과 비용 사용일을 기준으로 집계합니다.</p></div></div>
+          <div className="card-body">{summary?.months.length ? <FinanceTrend months={summary.months} /> : <p className="helper table-empty">표시할 손익 데이터가 없습니다.</p>}</div>
+        </div>
+        <div className="card finance-summary-card">
+          <div className="card-header"><div><h2 className="card-title">수입·지출 요약</h2><p className="card-copy">현재까지 확정된 금액입니다.</p></div></div>
+          <div className="finance-summary-body">
+            <dl className="finance-summary-list">
+              <div><dt>총 수입</dt><dd className="finance-summary-income">{formatWon(summary?.realizedIncome ?? 0)}</dd></div>
+              <div><dt>총 지출</dt><dd className="finance-summary-expense">{formatWon(summary?.realizedBusinessExpense ?? 0)}</dd></div>
+              <div><dt>순수익</dt><dd className="finance-summary-profit">{formatWon(summary?.netProfit ?? 0)}</dd></div>
+            </dl>
+            <div className="finance-profit-ring" style={{ '--profit-percent': `${summary?.realizedIncome ? Math.max(0, Math.min(100, (summary.netProfit / summary.realizedIncome) * 100)) : 0}%` } as CSSProperties}>
+              <span>순수익 비율<strong>{summary?.realizedIncome ? `${Math.max(0, (summary.netProfit / summary.realizedIncome) * 100).toFixed(1)}%` : '0%'}</strong></span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="card card-body" style={{ marginTop: 20 }}><div className="card-header flush-header"><div><h2 className="card-title">일회성 비용 등록</h2><p className="card-copy">장비·교통·외주·광고비 등을 거래와 연결하고 증빙 상태를 기록합니다.</p></div></div>
         <form className="stack" onSubmit={addExpense}>
