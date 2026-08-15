@@ -22,7 +22,13 @@ export interface Deal {
   notionPageId: string | null;
   notionPageUrl: string | null;
   notionExportedAt: string | null;
+  notionExportStatus: 'IDLE' | 'FAILED';
+  notionExportError: string | null;
+  notionExportAttempts: number;
   calendarSyncedAt: string | null;
+  calendarSyncStatus: 'IDLE' | 'FAILED';
+  calendarSyncError: string | null;
+  calendarSyncAttempts: number;
   rawText: string;
   createdAt: string;
   updatedAt: string;

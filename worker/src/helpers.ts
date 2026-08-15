@@ -18,7 +18,11 @@ export function dealResponse(row: Record<string, unknown>) {
     tasks: jsonArray(row.tasks), risks: jsonArray(row.risks), status: row.status,
     rawText: row.raw_text, paidAt: row.paid_at, notionPageId: row.notion_page_id,
     notionPageUrl: row.notion_page_url, notionExportedAt: row.notion_exported_at,
+    notionExportStatus: row.notion_export_status ?? 'IDLE', notionExportError: row.notion_export_error,
+    notionExportAttempts: row.notion_export_attempts ?? 0,
     calendarSyncedAt: row.calendar_synced_at,
+    calendarSyncStatus: row.calendar_sync_status ?? 'IDLE', calendarSyncError: row.calendar_sync_error,
+    calendarSyncAttempts: row.calendar_sync_attempts ?? 0,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }

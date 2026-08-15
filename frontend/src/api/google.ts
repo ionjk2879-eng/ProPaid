@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { Deal } from './deals';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -19,6 +20,6 @@ export async function disconnectGoogle(): Promise<void> {
   await apiClient.delete('/integrations/google');
 }
 
-export async function syncDealToCalendar(id: number): Promise<{ count: number }> {
-  return (await apiClient.post<{ count: number }>(`/deals/${id}/calendar`)).data;
+export async function syncDealToCalendar(id: number): Promise<{ count: number; failed: number; deal: Deal }> {
+  return (await apiClient.post<{ count: number; failed: number; deal: Deal }>(`/deals/${id}/calendar`)).data;
 }

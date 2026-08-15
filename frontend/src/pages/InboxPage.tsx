@@ -5,6 +5,7 @@ import type { ProposalAnalysis } from '../api/proposal';
 import WithholdingBadge from '../components/WithholdingBadge';
 
 const splitLines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
+const RETRY_QUARANTINE_THRESHOLD = 3;
 
 export default function InboxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -124,7 +125,12 @@ export default function InboxPage() {
         {messages.map((message) => (
           <article key={message.id} className="card message-card"><div className="message-summary">
             <div className="message-top"><div><div className="message-subject">{message.subject || '제목 없음'}</div><p className="message-sender">{message.sender || '발신자 정보 없음'} · {new Date(message.createdAt).toLocaleDateString('ko-KR')}</p></div><span className={`badge ${message.status === 'SAVED' ? 'badge-saved' : message.status === 'FAILED' ? 'badge-review' : 'badge-review'}`}>{message.status === 'SAVED' ? '거래 저장됨' : message.status === 'FAILED' ? '처리 실패' : '확인 필요'}</span></div>
-            {message.status === 'FAILED' && <div className="alert alert-error">메일을 분석하지 못했습니다. {message.errorMessage || '잠시 후 다시 시도해주세요.'} · 시도 {message.attemptCount}회</div>}
+            {message.status === 'FAILED' && (
+              <div className="alert alert-error">
+                {message.attemptCount >= RETRY_QUARANTINE_THRESHOLD ? `여러 번 처리에 실패했습니다 (${message.attemptCount}회). ` : '메일을 분석하지 못했습니다. '}
+                {message.errorMessage || '잠시 후 다시 시도해주세요.'} · 시도 {message.attemptCount}회
+              </div>
+            )}
             {editingId === message.id && draft ? (
               <div className="edit-panel" style={{ margin: '18px -22px -20px' }}><div className="form-grid">
                 <label className="field"><span className="field-label">거래처</span><input value={draft.client ?? ''} onChange={(event) => updateDraft('client', event.target.value || null)} /></label>

@@ -412,8 +412,11 @@ app.post('/api/deals/:id/calendar', async (c) => {
   const connection = await c.env.DB.prepare('SELECT access_token_encrypted, refresh_token_encrypted, token_expiry FROM google_connections WHERE user_id = ?')
     .bind(user.id).first<GoogleConnection>();
   if (!connection) return c.json({ message: 'Google Calendar가 연결되지 않았습니다.' }, 409);
-  const deal = await c.env.DB.prepare('SELECT client, deal_type, amount, draft_due_date, publish_due_date, payment_due_date FROM deals WHERE id = ? AND user_id = ?')
-    .bind(dealId, user.id).first<{ client: string | null; deal_type: string | null; amount: number | null; draft_due_date: string | null; publish_due_date: string | null; payment_due_date: string | null }>();
+  const deal = await c.env.DB.prepare(`SELECT client, deal_type, amount, draft_due_date, publish_due_date, payment_due_date,
+      calendar_draft_event_id, calendar_publish_event_id, calendar_payment_event_id FROM deals WHERE id = ? AND user_id = ?`)
+    .bind(dealId, user.id).first<{ client: string | null; deal_type: string | null; amount: number | null;
+      draft_due_date: string | null; publish_due_date: string | null; payment_due_date: string | null;
+      calendar_draft_event_id: string | null; calendar_publish_event_id: string | null; calendar_payment_event_id: string | null }>();
   if (!deal) return c.json({ message: '거래를 찾을 수 없습니다.' }, 404);
   if (!deal.draft_due_date && !deal.publish_due_date && !deal.payment_due_date)
     return c.json({ message: '등록된 날짜가 없습니다. 거래 상세에서 날짜를 먼저 입력해주세요.' }, 400);
@@ -423,20 +426,43 @@ app.post('/api/deals/:id/calendar', async (c) => {
   });
   const clientName = deal.client ?? '거래처 미정';
   const description = `Propaid 거래\n거래처: ${clientName}${deal.deal_type ? `\n유형: ${deal.deal_type}` : ''}${deal.amount != null ? `\n금액: ${deal.amount.toLocaleString()}원` : ''}`;
-  const createEvent = async (date: string, summary: string, colorId: string) => {
+  // 이미 만든 일정이 있으면 새로 만들지 않고 같은 이벤트를 갱신해 중복 생성을 막는다.
+  const upsertEvent = async (date: string, summary: string, colorId: string, existingEventId: string | null): Promise<string> => {
     const end = new Date(date); end.setDate(end.getDate() + 1);
-    const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-      method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary, description, colorId, start: { date }, end: { date: end.toISOString().slice(0, 10) } }),
-    });
+    const body = JSON.stringify({ summary, description, colorId, start: { date }, end: { date: end.toISOString().slice(0, 10) } });
+    const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+    const create = () => fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', { method: 'POST', headers, body });
+    let res = existingEventId
+      ? await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingEventId}`, { method: 'PATCH', headers, body })
+      : await create();
+    if (!res.ok && existingEventId && (res.status === 404 || res.status === 410)) res = await create();
     if (!res.ok) { const e = await res.json<{ error?: { message?: string } }>(); throw new Error(e.error?.message || 'Calendar 일정 생성 실패'); }
+    const saved = await res.json<{ id: string }>();
+    return saved.id;
   };
-  let count = 0;
-  if (deal.draft_due_date) { await createEvent(deal.draft_due_date, `[${clientName}] 초안 마감`, '5'); count++; }
-  if (deal.publish_due_date) { await createEvent(deal.publish_due_date, `[${clientName}] 게시 마감`, '6'); count++; }
-  if (deal.payment_due_date) { await createEvent(deal.payment_due_date, `[${clientName}] 입금 예정`, '2'); count++; }
-  await c.env.DB.prepare('UPDATE deals SET calendar_synced_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').bind(dealId, user.id).run();
-  return c.json({ count });
+  const tasks: Array<['draft' | 'publish' | 'payment', string | null, string, string]> = [
+    ['draft', deal.draft_due_date, `[${clientName}] 초안 마감`, '5'],
+    ['publish', deal.publish_due_date, `[${clientName}] 게시 마감`, '6'],
+    ['payment', deal.payment_due_date, `[${clientName}] 입금 예정`, '2'],
+  ];
+  const eventIds = { draft: deal.calendar_draft_event_id, publish: deal.calendar_publish_event_id, payment: deal.calendar_payment_event_id };
+  const failures: string[] = [];
+  let succeeded = 0;
+  for (const [type, date, summary, colorId] of tasks) {
+    if (!date) continue;
+    try { eventIds[type] = await upsertEvent(date, summary, colorId, eventIds[type]); succeeded++; }
+    catch (error) { failures.push(`${summary}: ${error instanceof Error ? error.message : '일정 생성 실패'}`); }
+  }
+  const status = failures.length ? 'FAILED' : 'IDLE';
+  const errorSummary = failures.length ? failures.join(' / ').slice(0, 500) : null;
+  await c.env.DB.prepare(`UPDATE deals SET calendar_draft_event_id = ?, calendar_publish_event_id = ?, calendar_payment_event_id = ?,
+      calendar_synced_at = CASE WHEN ? > 0 THEN CURRENT_TIMESTAMP ELSE calendar_synced_at END,
+      calendar_sync_status = ?, calendar_sync_error = ?, calendar_sync_attempts = calendar_sync_attempts + 1
+      WHERE id = ? AND user_id = ?`)
+    .bind(eventIds.draft, eventIds.publish, eventIds.payment, succeeded, status, errorSummary, dealId, user.id).run();
+  const updated = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ? AND user_id = ?').bind(dealId, user.id).first<Record<string, unknown>>();
+  if (failures.length && !succeeded) return c.json({ message: errorSummary || 'Calendar 일정 등록에 실패했습니다.', deal: dealResponse(updated!) }, 502);
+  return c.json({ count: succeeded, failed: failures.length, deal: dealResponse(updated!) });
 });
 
 app.get('/api/subscriptions', async (c) => {
@@ -586,6 +612,8 @@ app.post('/api/deals/:id/notion', async (c) => {
     .first<Record<string, unknown>>();
   if (!deal) return c.json({ message: '거래를 찾을 수 없습니다.' }, 404);
   if (deal.status === 'REVIEW') return c.json({ message: '사용자가 확인한 거래만 Notion으로 내보낼 수 있습니다.' }, 400);
+  // 이미 내보낸 거래는 새 페이지를 만들지 않고 같은 페이지의 속성만 갱신해 중복 생성을 막는다.
+  const existingPageId = deal.notion_page_id ? String(deal.notion_page_id) : null;
   const connection = await c.env.DB.prepare('SELECT access_token_encrypted, refresh_token_encrypted, database_id FROM notion_connections WHERE user_id = ?')
     .bind(user.id).first<{ access_token_encrypted: string; refresh_token_encrypted: string | null; database_id: string | null }>();
   if (!connection) return c.json({ message: '먼저 Notion을 연결해주세요.' }, 409);
@@ -626,11 +654,12 @@ app.post('/api/deals/:id/notion', async (c) => {
   if (has('Propaid ID')) properties['Propaid ID'] = { number: Number(deal.id) };
   const dates = { '초안 기한': dateProperty(deal.draft_due_date), '게시 기한': dateProperty(deal.publish_due_date), '입금 예정일': dateProperty(deal.payment_due_date) };
   Object.entries(dates).forEach(([key, value]) => { if (value && has(key)) properties[key] = value; });
-  const pageBody = JSON.stringify({ parent: { database_id: connection.database_id }, properties, children });
-  const createPage = () => fetch('https://api.notion.com/v1/pages', {
-    method: 'POST', headers: notionHeaders(accessToken), body: pageBody,
+  // 이미 내보낸 거래는 페이지를 새로 만들지 않고 같은 페이지의 속성만 갱신한다(본문 블록은 최초 생성 시에만 기록).
+  const pageBody = JSON.stringify(existingPageId ? { properties } : { parent: { database_id: connection.database_id }, properties, children });
+  const sendPage = () => fetch(existingPageId ? `https://api.notion.com/v1/pages/${existingPageId}` : 'https://api.notion.com/v1/pages', {
+    method: existingPageId ? 'PATCH' : 'POST', headers: notionHeaders(accessToken), body: pageBody,
   });
-  let response = await createPage();
+  let response = await sendPage();
   if (response.status === 401 && connection.refresh_token_encrypted && c.env.NOTION_CLIENT_ID && c.env.NOTION_CLIENT_SECRET) {
     const refreshToken = await decryptNotionToken(connection.refresh_token_encrypted, c.env.JWT_SECRET);
     const refreshed = await fetch('https://api.notion.com/v1/oauth/token', {
@@ -644,17 +673,20 @@ app.post('/api/deals/:id/notion', async (c) => {
       await c.env.DB.prepare('UPDATE notion_connections SET access_token_encrypted = ?, refresh_token_encrypted = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
         .bind(await encryptNotionToken(tokens.access_token, c.env.JWT_SECRET),
           tokens.refresh_token ? await encryptNotionToken(tokens.refresh_token, c.env.JWT_SECRET) : connection.refresh_token_encrypted, user.id).run();
-      response = await createPage();
+      response = await sendPage();
     }
   }
   const page = await response.json<Record<string, unknown>>();
   if (!response.ok || !page.id) {
-    const detail = [page.message, page.code].filter(Boolean).join(' / ');
-    return c.json({ message: String(detail || `Notion 페이지 생성 실패 (${response.status})`) }, 400);
+    const detail = String([page.message, page.code].filter(Boolean).join(' / ') || `Notion 페이지 ${existingPageId ? '갱신' : '생성'} 실패 (${response.status})`);
+    await c.env.DB.prepare(`UPDATE deals SET notion_export_status = 'FAILED', notion_export_error = ?, notion_export_attempts = notion_export_attempts + 1 WHERE id = ? AND user_id = ?`)
+      .bind(detail.slice(0, 500), id, user.id).run();
+    return c.json({ message: detail }, 400);
   }
   const pageId = String(page.id);
-  const pageUrl = String(page.url ?? `https://www.notion.so/${pageId.replace(/-/g, '')}`);
-  await c.env.DB.prepare('UPDATE deals SET notion_page_id = ?, notion_page_url = ?, notion_exported_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
+  const pageUrl = existingPageId ? String(deal.notion_page_url ?? page.url ?? '') : String(page.url ?? `https://www.notion.so/${pageId.replace(/-/g, '')}`);
+  await c.env.DB.prepare(`UPDATE deals SET notion_page_id = ?, notion_page_url = ?, notion_exported_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
+      notion_export_status = 'IDLE', notion_export_error = NULL, notion_export_attempts = notion_export_attempts + 1 WHERE id = ? AND user_id = ?`)
     .bind(pageId, pageUrl, id, user.id).run();
   const updated = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ? AND user_id = ?').bind(id, user.id).first<Record<string, unknown>>();
   return c.json(dealResponse(updated!));
@@ -843,6 +875,7 @@ app.post('/api/webhooks/resend', async (c) => {
   const token = recipient?.split('@')[0].replace(/^inbox-/, '');
   const user = token ? await c.env.DB.prepare('SELECT id FROM users WHERE inbox_token = ?').bind(token).first<{ id: number }>() : null;
   if (!user || !recipient) return c.json({ received: true, ignored: 'unknown_recipient' });
+  const isUniqueViolation = (error: unknown) => error instanceof Error && /unique/i.test(error.message);
   try {
     const processed = await receiveEmail(event.data.email_id, c.env);
     await c.env.DB.prepare(`INSERT INTO inbound_emails
@@ -852,12 +885,19 @@ app.post('/api/webhooks/resend', async (c) => {
         processed.subject ?? event.data.subject ?? null, processed.text, JSON.stringify(processed.analysis)).run();
     return c.json({ received: true });
   } catch (error) {
-    await c.env.DB.prepare(`INSERT INTO inbound_emails
-      (user_id, resend_email_id, svix_id, sender, recipient, subject, text_body, analysis, status, error_message, last_attempt_at)
-      VALUES (?, ?, ?, ?, ?, ?, '', ?, 'FAILED', ?, CURRENT_TIMESTAMP)`)
-      .bind(user.id, event.data.email_id, svixId, event.data.from ?? null, recipient, event.data.subject ?? null,
-        JSON.stringify(analyzeProposal('')), safeInboundError(error)).run();
-    return c.json({ received: true, status: 'FAILED' }, 202);
+    // 거의 동시에 도착한 같은 웹훅이 중복 검사를 함께 통과했을 수 있으므로, 삽입 단계의 유니크 제약 위반도 중복으로 처리한다.
+    if (isUniqueViolation(error)) return c.json({ received: true, duplicate: true });
+    try {
+      await c.env.DB.prepare(`INSERT INTO inbound_emails
+        (user_id, resend_email_id, svix_id, sender, recipient, subject, text_body, analysis, status, error_message, last_attempt_at)
+        VALUES (?, ?, ?, ?, ?, ?, '', ?, 'FAILED', ?, CURRENT_TIMESTAMP)`)
+        .bind(user.id, event.data.email_id, svixId, event.data.from ?? null, recipient, event.data.subject ?? null,
+          JSON.stringify(analyzeProposal('')), safeInboundError(error)).run();
+      return c.json({ received: true, status: 'FAILED' }, 202);
+    } catch (insertError) {
+      if (isUniqueViolation(insertError)) return c.json({ received: true, duplicate: true });
+      throw insertError;
+    }
   }
 });
 

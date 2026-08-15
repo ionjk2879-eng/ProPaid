@@ -19,6 +19,7 @@ const statusMeta: Record<DealStatus, { icon: string; hint: string; next: DealSta
   PAID: { icon: '▤', hint: '거래 완료', next: null, action: '거래 내역 보기' },
 };
 const splitLines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
+const EXPORT_QUARANTINE_THRESHOLD = 3;
 
 export default function DealsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -115,10 +116,14 @@ export default function DealsPage() {
   const addToCalendar = async (id: number) => {
     setGoogleBusy(id); setError(null); setNotice(null);
     try {
-      const { count } = await syncDealToCalendar(id);
-      setDeals((items) => items.map((item) => item.id === id ? { ...item, calendarSyncedAt: new Date().toISOString() } : item));
-      setNotice(<>Google Calendar에 일정 {count}개를 등록했습니다. <a href="https://calendar.google.com" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>캘린더 열기 →</a></>);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Calendar 등록에 실패했습니다.'); }
+      const { count, failed, deal } = await syncDealToCalendar(id);
+      setDeals((items) => items.map((item) => item.id === id ? deal : item));
+      if (failed) setError(`${failed}건의 일정 등록에 실패했습니다. ${deal.calendarSyncError ?? ''}`);
+      if (count) setNotice(<>Google Calendar에 일정 {count}개를 등록했습니다. <a href="https://calendar.google.com" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>캘린더 열기 →</a></>);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Calendar 등록에 실패했습니다.');
+      await load(); // 실패 횟수·오류 메시지는 서버에 저장되므로 최신 상태를 다시 불러온다.
+    }
     finally { setGoogleBusy(null); }
   };
 
@@ -127,8 +132,11 @@ export default function DealsPage() {
     try {
       const updated = await exportDealToNotion(id);
       setDeals((items) => items.map((item) => item.id === id ? updated : item));
-      setNotice('확인된 거래를 Notion 페이지로 내보냈습니다.');
-    } catch (e) { setError(e instanceof Error ? e.message : 'Notion 내보내기에 실패했습니다. 연결 상태를 확인해주세요.'); }
+      setNotice(updated.notionExportAttempts > 1 ? 'Notion 페이지를 최신 정보로 갱신했습니다.' : '확인된 거래를 Notion 페이지로 내보냈습니다.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Notion 내보내기에 실패했습니다. 연결 상태를 확인해주세요.');
+      await load(); // 실패 횟수·오류 메시지는 서버에 저장되므로 최신 상태를 다시 불러온다.
+    }
     finally { setNotionBusy(null); }
   };
 
@@ -237,8 +245,17 @@ export default function DealsPage() {
                       {expandedPipelineId === deal.id && (
                         <div className="pipeline-card-actions" onClick={(e) => e.stopPropagation()}>
                           <select className="pipeline-card-select" aria-label="거래 단계 직접 변경" value={deal.status} onChange={(e) => changeStatus(deal.id, e.target.value as DealStatus)}>{Object.entries(statusLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-                          {deal.notionPageUrl ? <a className="btn btn-secondary btn-sm" href={deal.notionPageUrl} target="_blank" rel="noreferrer">Notion에서 열기</a> : <button className="btn btn-secondary btn-sm" onClick={() => void sendToNotion(deal.id)} disabled={!notion?.configured || deal.status === 'REVIEW' || notionBusy !== null}>{notionBusy === deal.id ? '내보내는 중…' : 'Notion으로 보내기'}</button>}
+                          {deal.notionPageUrl && <a className="btn btn-secondary btn-sm" href={deal.notionPageUrl} target="_blank" rel="noreferrer">Notion에서 열기</a>}
+                          <button className="btn btn-secondary btn-sm" onClick={() => void sendToNotion(deal.id)} disabled={!notion?.configured || deal.status === 'REVIEW' || notionBusy !== null}>
+                            {notionBusy === deal.id ? '내보내는 중…' : deal.notionPageUrl ? '↻ Notion 갱신' : 'Notion으로 보내기'}
+                          </button>
+                          {deal.notionExportStatus === 'FAILED' && <span className={`badge ${deal.notionExportAttempts >= EXPORT_QUARANTINE_THRESHOLD ? 'badge-review' : 'badge-free'}`} title={deal.notionExportError ?? undefined}>
+                            Notion {deal.notionExportAttempts >= EXPORT_QUARANTINE_THRESHOLD ? `여러 번 실패 (${deal.notionExportAttempts}회)` : '실패'}
+                          </span>}
                           {google?.connected && <button className="btn btn-secondary btn-sm" onClick={() => void addToCalendar(deal.id)} disabled={(!deal.draftDueDate && !deal.publishDueDate && !deal.paymentDueDate) || googleBusy === deal.id}>{googleBusy === deal.id ? '등록 중…' : deal.calendarSyncedAt ? '📅 재등록' : '📅 Calendar'}</button>}
+                          {deal.calendarSyncStatus === 'FAILED' && <span className={`badge ${deal.calendarSyncAttempts >= EXPORT_QUARANTINE_THRESHOLD ? 'badge-review' : 'badge-free'}`} title={deal.calendarSyncError ?? undefined}>
+                            Calendar {deal.calendarSyncAttempts >= EXPORT_QUARANTINE_THRESHOLD ? `여러 번 실패 (${deal.calendarSyncAttempts}회)` : '실패'}
+                          </span>}
                           {isOverdue(deal) && <button className="btn btn-sm" style={{ background: '#fff4f0', color: '#c0390f', border: '1px solid #ffd4c8' }} onClick={() => setDunningDeal(deal)}>입금 확인 요청</button>}
                           <button className="btn btn-secondary btn-sm" onClick={() => startEditing(deal)}>상세 수정</button>
                         </div>
