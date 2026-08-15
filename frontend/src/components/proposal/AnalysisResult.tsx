@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import type { ProposalAnalysis } from '../../api/proposal';
 
 interface AnalysisResultProps {
@@ -57,9 +58,12 @@ export default function AnalysisResult({ result, saving, saved, onChange, onSave
         <EditableList title="해야 할 일" values={result.tasks} editing={editing} empty="자동 생성된 할 일이 없음" onChange={(values) => update('tasks', values)} />
       </div>
 
-      <div className="proposal-result-actions">
-        <button className="btn btn-secondary" type="button" onClick={() => setEditing((value) => !value)}>{editing ? '수정 완료' : '결과 수정'}</button>
-        <button className="btn btn-primary" onClick={onSave} disabled={saving || saved}>{saved ? '✓ 거래로 저장됨' : saving ? '저장 중…' : '확인 후 거래로 저장'}</button>
+      <div className={`proposal-result-actions${saved ? ' proposal-result-actions-saved' : ''}`}>
+        <div className="proposal-result-actions-group">
+          <button className="btn btn-secondary" type="button" onClick={() => setEditing((value) => !value)}>{editing ? '수정 완료' : '결과 수정'}</button>
+          <button className="btn btn-primary" onClick={onSave} disabled={saving || saved}>{saved ? '✓ 거래로 저장됨' : saving ? '저장 중…' : '확인 후 거래로 저장'}</button>
+        </div>
+        {saved && <Link to="/deals" className="btn btn-primary">거래 관리로 이동</Link>}
       </div>
     </section>
   );
