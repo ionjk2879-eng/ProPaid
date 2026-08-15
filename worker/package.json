@@ -11,7 +11,8 @@
     "predb:remote": "node scripts/backup-d1.mjs",
     "db:remote": "wrangler d1 migrations apply propaid --remote",
     "backup:remote": "node scripts/backup-d1.mjs",
-    "restore:drill": "node scripts/restore-drill.mjs"
+    "restore:drill": "node scripts/restore-drill.mjs",
+    "ownership:check": "node scripts/ownership-check.mjs"
   },
   "dependencies": {
     "hono": "^4.9.2"

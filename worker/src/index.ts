@@ -5,12 +5,14 @@ import { analyzeWithAdapter } from './llm';
 import { body, dealResponse, expenseResponse, getUser, subscriptionResponse, type AppContext } from './helpers';
 import { createToken, hashPassword, randomToken, verifyToken } from './security';
 import { createNotionState, decryptNotionToken, encryptNotionToken, notionAppOrigin, notionHeaders, notionRedirectUri, verifyNotionState } from './notion';
-import { createGoogleLoginState, createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleLoginRedirectUri, googleRedirectUri, verifyGoogleLoginState, verifyGoogleState, type GoogleConnection } from './google';
+import { createGoogleLoginState, createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleLoginRedirectUri, googleRedirectUri, GoogleReauthRequiredError, verifyGoogleLoginState, verifyGoogleState, type GoogleConnection } from './google';
 import { DELETION_GRACE_DAYS, purgeUser, scheduledDeletionAt } from './account';
 import { QUARANTINE_ALERT_THRESHOLD, sendAlert } from './alerts';
 import { runAccountMaintenance, runFailureAlertCheck } from './cron';
-import { logError, type LogContext } from './log';
+import { log, logError, type LogContext } from './log';
 import { recordMetric } from './metrics';
+import { checkRateLimit, clientIp } from './ratelimit';
+import { verifyTurnstile } from './turnstile';
 import type { Env, UserRow, Variables } from './types';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -62,9 +64,14 @@ app.use('/api/*', async (c, next) => {
 });
 
 // 관리자 백업 조회 API는 사용자 로그인과 무관하게 별도의 고정 토큰으로만 접근을 허용한다(복구 훈련 스크립트 전용).
+// 모든 접근 시도(성공·실패 모두)를 Workers Logs에 기록해 감사 추적을 남긴다.
 app.use('/api/admin/*', async (c, next) => {
   const token = c.req.header('X-Admin-Token');
-  if (!c.env.ADMIN_TOKEN || !token || token !== c.env.ADMIN_TOKEN) return c.json({ message: '관리자 인증이 필요합니다.' }, 401);
+  const granted = Boolean(c.env.ADMIN_TOKEN && token && token === c.env.ADMIN_TOKEN);
+  log('info', '관리자 API 접근', reqCtx(c as AppContext), {
+    path: c.req.path, method: c.req.method, ip: clientIp(c.req.raw.headers), granted,
+  });
+  if (!granted) return c.json({ message: '관리자 인증이 필요합니다.' }, 401);
   return next();
 });
 
@@ -99,6 +106,7 @@ app.onError((error, c) => {
 app.get('/api/health', (c) => c.json({ status: 'ok', runtime: 'cloudflare-workers' }));
 
 app.get('/api/auth/google', async (c) => {
+  if (!await checkRateLimit(c.env, 'LOGIN_LIMITER', clientIp(c.req.raw.headers))) return c.json({ message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }, 429);
   if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ message: 'Google 로그인 설정이 아직 등록되지 않았습니다.' }, 503);
   }
@@ -116,6 +124,7 @@ app.get('/api/auth/google', async (c) => {
 app.get('/api/auth/google/callback', async (c) => {
   const origin = googleAppOrigin(c.env);
   const loginError = (reason: string) => c.redirect(`${origin}/auth/google/callback?error=${reason}`);
+  if (!await checkRateLimit(c.env, 'LOGIN_LIMITER', clientIp(c.req.raw.headers))) return loginError('rate_limited');
   if (c.req.query('error')) return loginError('denied');
   if (!await verifyGoogleLoginState(c.req.query('state') ?? '', c.env.JWT_SECRET)) return loginError('invalid_state');
   const code = c.req.query('code');
@@ -309,8 +318,8 @@ app.get('/api/integrations/notion/callback', async (c) => {
       refresh_token_encrypted = excluded.refresh_token_encrypted, workspace_id = excluded.workspace_id,
       workspace_name = excluded.workspace_name, bot_id = excluded.bot_id,
       root_page_id = COALESCE(excluded.root_page_id, notion_connections.root_page_id), updated_at = CURRENT_TIMESTAMP`)
-      .bind(userId, await encryptNotionToken(token.access_token, c.env.JWT_SECRET),
-        token.refresh_token ? await encryptNotionToken(token.refresh_token, c.env.JWT_SECRET) : null,
+      .bind(userId, await encryptNotionToken(token.access_token, c.env),
+        token.refresh_token ? await encryptNotionToken(token.refresh_token, c.env) : null,
         token.workspace_id, token.workspace_name ?? null, token.bot_id, token.duplicated_template_id ?? null).run();
     return c.redirect(`${origin}/deals?notion=connected`);
   } catch (error) {
@@ -340,7 +349,7 @@ app.post('/api/integrations/notion/setup', async (c) => {
     }
     return c.json({ configured: true, rootPageUrl });
   }
-  const accessToken = await decryptNotionToken(connection.access_token_encrypted, c.env.JWT_SECRET);
+  const accessToken = await decryptNotionToken(connection.access_token_encrypted, c.env);
   const rich = (content: string, bold = false) => [{ type: 'text', text: { content }, annotations: { bold } }];
   const request = async (path: string, bodyValue?: unknown, method = 'POST') => {
     const response = await fetch(`https://api.notion.com/v1/${path}`, { method, headers: notionHeaders(accessToken),
@@ -447,8 +456,8 @@ app.get('/api/integrations/google/callback', async (c) => {
       VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET access_token_encrypted = excluded.access_token_encrypted,
       refresh_token_encrypted = COALESCE(excluded.refresh_token_encrypted, google_connections.refresh_token_encrypted),
       token_expiry = excluded.token_expiry, google_email = excluded.google_email, updated_at = CURRENT_TIMESTAMP`)
-      .bind(userId, await encryptGoogleToken(tokens.access_token, c.env.JWT_SECRET),
-        tokens.refresh_token ? await encryptGoogleToken(tokens.refresh_token, c.env.JWT_SECRET) : null,
+      .bind(userId, await encryptGoogleToken(tokens.access_token, c.env),
+        tokens.refresh_token ? await encryptGoogleToken(tokens.refresh_token, c.env) : null,
         expiry, userInfo.email ?? null).run();
     return c.redirect(`${origin}/deals?google=connected`);
   } catch (error) {
@@ -476,10 +485,21 @@ app.post('/api/deals/:id/calendar', async (c) => {
   if (!deal) return c.json({ message: '거래를 찾을 수 없습니다.' }, 404);
   if (!deal.draft_due_date && !deal.publish_due_date && !deal.payment_due_date)
     return c.json({ message: '등록된 날짜가 없습니다. 거래 상세에서 날짜를 먼저 입력해주세요.' }, 400);
-  const accessToken = await getGoogleAccessToken(connection, c.env, async (encrypted, expiry) => {
-    await c.env.DB.prepare('UPDATE google_connections SET access_token_encrypted = ?, token_expiry = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
-      .bind(encrypted, expiry, user.id).run();
-  });
+  let accessToken: string;
+  try {
+    accessToken = await getGoogleAccessToken(connection, c.env, async (encrypted, expiry) => {
+      await c.env.DB.prepare('UPDATE google_connections SET access_token_encrypted = ?, token_expiry = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
+        .bind(encrypted, expiry, user.id).run();
+    });
+  } catch (error) {
+    if (error instanceof GoogleReauthRequiredError) {
+      // 리프레시 토큰이 만료·철회된 경우로, 연결을 정리해 status API가 정확히 "연결 안 됨"을 보고하게 한다.
+      await c.env.DB.prepare('DELETE FROM google_connections WHERE user_id = ?').bind(user.id).run();
+      logError('Google 토큰 갱신 실패로 연결을 해제했습니다.', reqCtx(c as AppContext));
+      return c.json({ message: 'Google 연결이 만료되었습니다. 설정에서 다시 연결해주세요.' }, 409);
+    }
+    throw error;
+  }
   const clientName = deal.client ?? '거래처 미정';
   const description = `Propaid 거래\n거래처: ${clientName}${deal.deal_type ? `\n유형: ${deal.deal_type}` : ''}${deal.amount != null ? `\n금액: ${deal.amount.toLocaleString()}원` : ''}`;
   // 이미 만든 일정이 있으면 새로 만들지 않고 같은 이벤트를 갱신해 중복 생성을 막는다.
@@ -576,10 +596,15 @@ app.get('/api/subscriptions/suggest', (c) => {
 });
 
 app.post('/api/proposals/preview', async (c) => {
-  const input = await body<{ text?: string }>(c as AppContext);
+  const user = getUser(c as AppContext);
+  if (!await checkRateLimit(c.env, 'ANALYSIS_LIMITER', String(user.id))) return c.json({ message: '분석 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }, 429);
+  const input = await body<{ text?: string; turnstileToken?: string }>(c as AppContext);
+  if (!await verifyTurnstile(c.env, input.turnstileToken, clientIp(c.req.raw.headers), reqCtx(c as AppContext))) {
+    return c.json({ message: '자동화 방지 확인에 실패했습니다. 새로고침 후 다시 시도해주세요.' }, 403);
+  }
   if (!input.text?.trim()) return c.json({ message: '제안 내용을 입력해주세요.' }, 400);
   if (input.text.length > 20_000) return c.json({ message: '제안 내용은 20,000자 이하여야 합니다.' }, 400);
-  return c.json(await analyzeWithAdapter(input.text, c.env, getUser(c as AppContext).id));
+  return c.json(await analyzeWithAdapter(input.text, c.env, user.id));
 });
 
 app.get('/api/deals', async (c) => {
@@ -702,7 +727,7 @@ app.post('/api/deals/:id/notion', async (c) => {
     ...(deal.raw_text ? [{ object: 'block', type: 'divider', divider: {} }, paragraph('원문', String(deal.raw_text).slice(0, 1900))] : []),
   ];
   const dateProperty = (value: unknown) => value ? { date: { start: String(value) } } : undefined;
-  let accessToken = await decryptNotionToken(connection.access_token_encrypted, c.env.JWT_SECRET);
+  let accessToken = await decryptNotionToken(connection.access_token_encrypted, c.env);
   const dbRes = await fetch(`https://api.notion.com/v1/databases/${connection.database_id}`, { headers: notionHeaders(accessToken) });
   const dbSchema = await dbRes.json<{ properties?: Record<string, { type: string }> }>();
   const schema = dbSchema.properties ?? {};
@@ -726,7 +751,7 @@ app.post('/api/deals/:id/notion', async (c) => {
   });
   let response = await sendPage();
   if (response.status === 401 && connection.refresh_token_encrypted && c.env.NOTION_CLIENT_ID && c.env.NOTION_CLIENT_SECRET) {
-    const refreshToken = await decryptNotionToken(connection.refresh_token_encrypted, c.env.JWT_SECRET);
+    const refreshToken = await decryptNotionToken(connection.refresh_token_encrypted, c.env);
     const refreshed = await fetch('https://api.notion.com/v1/oauth/token', {
       method: 'POST', headers: { Authorization: `Basic ${btoa(`${c.env.NOTION_CLIENT_ID}:${c.env.NOTION_CLIENT_SECRET}`)}`,
         Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -736,9 +761,16 @@ app.post('/api/deals/:id/notion', async (c) => {
     if (refreshed.ok && tokens.access_token) {
       accessToken = tokens.access_token;
       await c.env.DB.prepare('UPDATE notion_connections SET access_token_encrypted = ?, refresh_token_encrypted = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
-        .bind(await encryptNotionToken(tokens.access_token, c.env.JWT_SECRET),
-          tokens.refresh_token ? await encryptNotionToken(tokens.refresh_token, c.env.JWT_SECRET) : connection.refresh_token_encrypted, user.id).run();
+        .bind(await encryptNotionToken(tokens.access_token, c.env),
+          tokens.refresh_token ? await encryptNotionToken(tokens.refresh_token, c.env) : connection.refresh_token_encrypted, user.id).run();
       response = await sendPage();
+    } else {
+      // 리프레시 토큰 자체가 만료·철회된 경우로, 재시도해도 다시 실패할 뿐이다.
+      // 연결을 정리해 /api/integrations/notion/status가 "연결 안 됨"을 정확히 보고하고
+      // 사용자가 재연결을 시도하도록 한다.
+      await c.env.DB.prepare('DELETE FROM notion_connections WHERE user_id = ?').bind(user.id).run();
+      logError('Notion 토큰 갱신 실패로 연결을 해제했습니다.', reqCtx(c as AppContext));
+      return c.json({ message: 'Notion 연결이 만료되었습니다. 설정에서 다시 연결해주세요.' }, 409);
     }
   }
   const page = await response.json<Record<string, unknown>>();
@@ -861,6 +893,7 @@ app.get('/api/inbox/messages', async (c) => {
 app.post('/api/inbox/messages/:id/retry', async (c) => {
   if (!c.env.RESEND_API_KEY) return c.json({ message: 'Resend API 키가 설정되지 않았습니다.' }, 503);
   const user = getUser(c as AppContext);
+  if (!await checkRateLimit(c.env, 'ANALYSIS_LIMITER', String(user.id))) return c.json({ message: '재시도 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }, 429);
   const row = await c.env.DB.prepare('SELECT id, resend_email_id, status FROM inbound_emails WHERE id = ? AND user_id = ?')
     .bind(Number(c.req.param('id')), user.id).first<{ id: number; resend_email_id: string; status: string }>();
   if (!row) return c.json({ message: '수신 메일을 찾을 수 없습니다.' }, 404);
@@ -960,6 +993,12 @@ app.post('/api/webhooks/resend', async (c) => {
   if (!user || !recipient) {
     recordMetric(c.env, 'webhook_resend', { blobs: ['ignored_unknown_recipient'] });
     return c.json({ received: true, ignored: 'unknown_recipient' });
+  }
+  // 특정 수신함으로 메일을 대량 발송해 Claude 분석 호출을 남용하는 것을 막기 위한 사용자별 처리량 제한.
+  // Resend는 성공(2xx) 응답이 없으면 재시도하므로, 여기서는 429 대신 받았다고만 응답하고 조용히 건너뛴다.
+  if (!await checkRateLimit(c.env, 'MAIL_LIMITER', String(user.id))) {
+    recordMetric(c.env, 'webhook_resend', { blobs: ['rate_limited'], userId: user.id });
+    return c.json({ received: true, ignored: 'rate_limited' });
   }
   const isUniqueViolation = (error: unknown) => error instanceof Error && /unique/i.test(error.message);
   try {

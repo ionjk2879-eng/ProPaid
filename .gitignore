@@ -20,6 +20,7 @@ worker/.wrangler/
 worker/backups/
 worker/.wrangler-restore-drill/
 worker/.wrangler-restore-drill-data.sql
+worker/.ownership-check-tmp.sql
 
 ## OS / editor
 .idea/

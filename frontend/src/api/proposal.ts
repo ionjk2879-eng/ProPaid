@@ -20,7 +20,7 @@ export interface ProposalAnalysis {
   warnings: string[];
 }
 
-export async function previewProposal(text: string): Promise<ProposalAnalysis> {
-  const response = await apiClient.post<ProposalAnalysis>('/proposals/preview', { text });
+export async function previewProposal(text: string, turnstileToken?: string): Promise<ProposalAnalysis> {
+  const response = await apiClient.post<ProposalAnalysis>('/proposals/preview', { text, turnstileToken });
   return response.data;
 }

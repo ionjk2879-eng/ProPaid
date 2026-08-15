@@ -1,3 +1,4 @@
+import { decryptWithPurpose, encryptWithPurpose } from './token-crypto';
 import type { Env } from './types';
 
 const encode = (v: Uint8Array) => btoa(String.fromCharCode(...v)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -38,23 +39,9 @@ export async function verifyGoogleLoginState(state: string, secret: string) {
   } catch { return false; }
 }
 
-async function encryptionKey(secret: string) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`propaid:google:${secret}`));
-  return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-
-export async function encryptGoogleToken(token: string, secret: string) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await encryptionKey(secret), new TextEncoder().encode(token));
-  return `${encode(iv)}.${encode(new Uint8Array(encrypted))}`;
-}
-
-export async function decryptGoogleToken(value: string, secret: string) {
-  const [iv, encrypted] = value.split('.');
-  if (!iv || !encrypted) throw new Error('Google 토큰을 복호화할 수 없습니다.');
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(iv) }, await encryptionKey(secret), decode(encrypted));
-  return new TextDecoder().decode(plain);
-}
+// 실제 암호화·복호화와 키 버전 관리는 token-crypto.ts에서 담당한다(Notion 연동과 로직 공유).
+export function encryptGoogleToken(token: string, env: Env) { return encryptWithPurpose('google', token, env); }
+export function decryptGoogleToken(value: string, env: Env) { return decryptWithPurpose('google', value, env); }
 
 export function googleRedirectUri(env: Env) {
   return env.GOOGLE_REDIRECT_URI || `${env.APP_ORIGIN.split(',')[0].trim()}/api/integrations/google/callback`;
@@ -74,18 +61,21 @@ export interface GoogleConnection {
   token_expiry: string | null;
 }
 
+/** 토큰 갱신이 되돌릴 수 없이 실패해 사용자가 다시 연결해야 함을 나타낸다(호출부가 연결 정보를 정리할 수 있도록 구분). */
+export class GoogleReauthRequiredError extends Error {}
+
 export async function getGoogleAccessToken(
   connection: GoogleConnection,
   env: Env,
   saveToken: (encrypted: string, expiry: string) => Promise<void>,
 ): Promise<string> {
   if (connection.token_expiry && new Date(connection.token_expiry) > new Date(Date.now() + 60_000)) {
-    return decryptGoogleToken(connection.access_token_encrypted, env.JWT_SECRET);
+    return decryptGoogleToken(connection.access_token_encrypted, env);
   }
   if (!connection.refresh_token_encrypted || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    throw new Error('Google 연결이 만료되었습니다. 다시 연결해주세요.');
+    throw new GoogleReauthRequiredError('Google 연결이 만료되었습니다. 다시 연결해주세요.');
   }
-  const refreshToken = await decryptGoogleToken(connection.refresh_token_encrypted, env.JWT_SECRET);
+  const refreshToken = await decryptGoogleToken(connection.refresh_token_encrypted, env);
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -95,9 +85,9 @@ export async function getGoogleAccessToken(
     }),
   });
   const tokens = await response.json<{ access_token?: string; expires_in?: number }>();
-  if (!response.ok || !tokens.access_token) throw new Error('Google 토큰 갱신에 실패했습니다. 다시 연결해주세요.');
+  if (!response.ok || !tokens.access_token) throw new GoogleReauthRequiredError('Google 토큰 갱신에 실패했습니다. 다시 연결해주세요.');
   const expiry = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
-  const encrypted = await encryptGoogleToken(tokens.access_token, env.JWT_SECRET);
+  const encrypted = await encryptGoogleToken(tokens.access_token, env);
   await saveToken(encrypted, expiry);
   return tokens.access_token;
 }

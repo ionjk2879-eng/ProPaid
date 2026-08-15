@@ -3,7 +3,10 @@ import { isAxiosError } from 'axios';
 import { previewProposal, type ProposalAnalysis } from '../api/proposal';
 import ProposalEditor from '../components/proposal/ProposalEditor';
 import AnalysisResult from '../components/proposal/AnalysisResult';
+import TurnstileWidget from '../components/TurnstileWidget';
 import { createDeal } from '../api/deals';
+
+const turnstileConfigured = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY);
 
 const example = `모바일 웹 화면 개발 외주를 제안드립니다.
 브랜드: A 브랜드
@@ -18,6 +21,7 @@ export default function ProposalPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string>();
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -25,7 +29,7 @@ export default function ProposalPage() {
     setError(null);
     setSaved(false);
     try {
-      setResult(await previewProposal(text));
+      setResult(await previewProposal(text, turnstileToken));
     } catch (err) {
       setResult(null);
       setError(isAxiosError(err) ? err.response?.data?.message ?? '분석에 실패했습니다.' : '분석에 실패했습니다.');
@@ -56,7 +60,15 @@ export default function ProposalPage() {
         <section className="card card-body proposal-source-card">
           <div className="proposal-panel-heading"><div><p className="eyebrow">SOURCE</p><h2 className="card-title">메일 원문</h2></div>{result && <span className="badge badge-confirmed">분석 완료</span>}</div>
           <div className="alert alert-info">원문에 없는 조건은 임의로 채우지 않습니다. 분석 결과는 메일 원문 기준 정보 표시이며 법률·계약 자문이 아닙니다. 계약 전 원문을 직접 확인하세요.</div>
-          <ProposalEditor text={text} loading={loading} onTextChange={setText} onLoadExample={() => setText(example)} onSubmit={handleSubmit} />
+          <ProposalEditor
+            text={text}
+            loading={loading}
+            onTextChange={setText}
+            onLoadExample={() => setText(example)}
+            onSubmit={handleSubmit}
+            submitDisabled={turnstileConfigured && !turnstileToken}
+            belowEditor={<TurnstileWidget onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(undefined)} />}
+          />
         </section>
         {result && <AnalysisResult result={result} saving={saving} saved={saved} onChange={handleResultChange} onSave={handleSave} />}
       </div>

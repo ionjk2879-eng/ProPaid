@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 
 interface ProposalEditorProps {
   text: string;
@@ -6,9 +6,11 @@ interface ProposalEditorProps {
   onTextChange: (text: string) => void;
   onLoadExample: () => void;
   onSubmit: (event: FormEvent) => void;
+  submitDisabled?: boolean;
+  belowEditor?: ReactNode;
 }
 
-export default function ProposalEditor({ text, loading, onTextChange, onLoadExample, onSubmit }: ProposalEditorProps) {
+export default function ProposalEditor({ text, loading, onTextChange, onLoadExample, onSubmit, submitDisabled, belowEditor }: ProposalEditorProps) {
   return (
     <form onSubmit={onSubmit}>
       <textarea
@@ -19,9 +21,10 @@ export default function ProposalEditor({ text, loading, onTextChange, onLoadExam
         required
         className="editor"
       />
+      {belowEditor}
       <div className="editor-footer">
         <button className="btn btn-secondary" type="button" onClick={onLoadExample}>예시 불러오기</button>
-        <div className="action-row"><span className="helper">{text.length.toLocaleString()} / 20,000자</span><button className="btn btn-primary" type="submit" disabled={loading || !text.trim()}>{loading ? '분석 중…' : '분석 미리보기'}</button>
+        <div className="action-row"><span className="helper">{text.length.toLocaleString()} / 20,000자</span><button className="btn btn-primary" type="submit" disabled={loading || !text.trim() || submitDisabled}>{loading ? '분석 중…' : '분석 미리보기'}</button>
         </div>
       </div>
     </form>

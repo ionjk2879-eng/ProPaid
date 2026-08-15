@@ -1,3 +1,4 @@
+import { decryptWithPurpose, encryptWithPurpose } from './token-crypto';
 import type { Env } from './types';
 
 const NOTION_VERSION = '2026-03-11';
@@ -23,23 +24,9 @@ export async function verifyNotionState(state: string, secret: string) {
   } catch { return null; }
 }
 
-async function encryptionKey(secret: string) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`propaid:notion:${secret}`));
-  return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-
-export async function encryptNotionToken(token: string, secret: string) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await encryptionKey(secret), new TextEncoder().encode(token));
-  return `${encode(iv)}.${encode(new Uint8Array(encrypted))}`;
-}
-
-export async function decryptNotionToken(value: string, secret: string) {
-  const [iv, encrypted] = value.split('.');
-  if (!iv || !encrypted) throw new Error('Notion 토큰을 복호화할 수 없습니다.');
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(iv) }, await encryptionKey(secret), decode(encrypted));
-  return new TextDecoder().decode(plain);
-}
+// 실제 암호화·복호화와 키 버전 관리는 token-crypto.ts에서 담당한다(Google 연동과 로직 공유).
+export function encryptNotionToken(token: string, env: Env) { return encryptWithPurpose('notion', token, env); }
+export function decryptNotionToken(value: string, env: Env) { return decryptWithPurpose('notion', value, env); }
 
 export function notionHeaders(accessToken: string) {
   return { Authorization: `Bearer ${accessToken}`, 'Notion-Version': NOTION_VERSION, 'Content-Type': 'application/json' };

@@ -12,3 +12,5 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 # GOOGLE_LOGIN_REDIRECT_URI=http://localhost:8787/api/auth/google/callback
 # ADMIN_TOKEN=replace-with-a-long-random-admin-token
 # ALERT_WEBHOOK_URL=https://hooks.slack.com/services/replace/me (Slack/Discord Incoming Webhook)
+# TOKEN_ENCRYPTION_KEY_V2=replace-with-at-least-32-random-characters (Notion·Google 토큰 전용 암호화 키. 없으면 JWT_SECRET으로 대체)
+# TURNSTILE_SECRET_KEY=replace_me (Cloudflare Turnstile 서버 측 검증 키. 없으면 /api/proposals/preview에서 검증을 건너뜀)

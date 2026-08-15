@@ -37,6 +37,11 @@
       "dataset": "propaid_metrics"
     }
   ],
+  "ratelimits": [
+    { "name": "LOGIN_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "ANALYSIS_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
+    { "name": "MAIL_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
+  ],
   "triggers": {
     "crons": ["0 18 * * *", "0 * * * *"]
   }
