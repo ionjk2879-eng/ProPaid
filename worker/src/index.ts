@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { analyzeProposal, type ProposalAnalysis } from './analyze';
 import { analyzeWithAdapter } from './llm';
-import { body, dealResponse, expenseResponse, getUser, subscriptionResponse, type AppContext } from './helpers';
+import { body, CHECKLIST_ITEM_KEYS, dealResponse, expenseResponse, getUser, subscriptionResponse, type AppContext } from './helpers';
 import { createToken, hashPassword, randomToken, verifyToken } from './security';
 import { createNotionState, decryptNotionToken, encryptNotionToken, notionAppOrigin, notionHeaders, notionRedirectUri, verifyNotionState } from './notion';
 import { createGoogleLoginState, createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleLoginRedirectUri, googleRedirectUri, GoogleReauthRequiredError, verifyGoogleLoginState, verifyGoogleState, type GoogleConnection } from './google';
@@ -706,6 +706,22 @@ app.patch('/api/deals/:id', async (c) => {
   await c.env.DB.prepare(`UPDATE deals SET client = ?, deal_type = ?, amount = ?, deliverables = ?, draft_due_date = ?, publish_due_date = ?, payment_due_date = ?, revision_count = ?, secondary_usage = ?, payment_condition = ?, tasks = ?, risks = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`)
     .bind(text(input.client), text(input.dealType), amount, JSON.stringify(deliverables), draftDueDate, publishDueDate, paymentDueDate,
       revisionCount, text(input.secondaryUsage), text(input.paymentCondition), JSON.stringify(tasks), JSON.stringify(risks), id, user.id).run();
+  const row = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ? AND user_id = ?').bind(id, user.id).first<Record<string, unknown>>();
+  return c.json(dealResponse(row!));
+});
+
+app.patch('/api/deals/:id/checklist', async (c) => {
+  const user = getUser(c as AppContext);
+  const id = Number(c.req.param('id'));
+  const existing = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ? AND user_id = ?').bind(id, user.id).first();
+  if (!existing) return c.json({ message: '거래를 찾을 수 없습니다.' }, 404);
+  const input = await body<{ confirmedItems?: unknown }>(c as AppContext);
+  const confirmedItems = Array.isArray(input.confirmedItems)
+    ? input.confirmedItems.filter((item): item is string => CHECKLIST_ITEM_KEYS.includes(item as typeof CHECKLIST_ITEM_KEYS[number]))
+    : null;
+  if (!confirmedItems) return c.json({ message: '체크리스트 항목이 올바르지 않습니다.' }, 400);
+  await c.env.DB.prepare('UPDATE deals SET checklist_confirmed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
+    .bind(JSON.stringify([...new Set(confirmedItems)]), id, user.id).run();
   const row = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ? AND user_id = ?').bind(id, user.id).first<Record<string, unknown>>();
   return c.json(dealResponse(row!));
 });

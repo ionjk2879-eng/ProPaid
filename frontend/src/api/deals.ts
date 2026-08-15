@@ -29,6 +29,7 @@ export interface Deal {
   calendarSyncStatus: 'IDLE' | 'FAILED';
   calendarSyncError: string | null;
   calendarSyncAttempts: number;
+  checklistConfirmed: string[];
   rawText: string;
   createdAt: string;
   updatedAt: string;
@@ -58,4 +59,8 @@ export async function updateDeal(id: number, input: DealDetailsInput): Promise<D
 
 export async function deleteDeal(id: number): Promise<void> {
   await apiClient.delete(`/deals/${id}`);
+}
+
+export async function updateDealChecklist(id: number, confirmedItems: string[]): Promise<Deal> {
+  return (await apiClient.patch<Deal>(`/deals/${id}/checklist`, { confirmedItems })).data;
 }

@@ -8,6 +8,13 @@ export function jsonArray(value: unknown): string[] {
   try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
 }
 
+// 거래 확정 전 사용자가 원문에서 직접 확인해야 하는 9개 고정 조건 항목의 키.
+// 프런트엔드의 CHECKLIST_ITEMS(frontend/src/utils/checklist.ts)와 키를 반드시 맞춰야 한다.
+export const CHECKLIST_ITEM_KEYS = [
+  'revisionCount', 'secondaryUsage', 'adPeriod', 'contentRetention', 'originalFile',
+  'portraitCopyright', 'paymentDate', 'taxWithholding', 'cancellationTerms',
+] as const;
+
 export function dealResponse(row: Record<string, unknown>) {
   return {
     id: row.id, client: row.client, dealType: row.deal_type, amount: row.amount,
@@ -23,6 +30,7 @@ export function dealResponse(row: Record<string, unknown>) {
     calendarSyncedAt: row.calendar_synced_at,
     calendarSyncStatus: row.calendar_sync_status ?? 'IDLE', calendarSyncError: row.calendar_sync_error,
     calendarSyncAttempts: row.calendar_sync_attempts ?? 0,
+    checklistConfirmed: jsonArray(row.checklist_confirmed),
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }

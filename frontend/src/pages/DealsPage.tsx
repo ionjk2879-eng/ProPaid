@@ -6,7 +6,10 @@ import { connectGoogle, disconnectGoogle, fetchGoogleStatus, syncDealToCalendar,
 import WithholdingBadge from '../components/WithholdingBadge';
 import DunningModal from '../components/DunningModal';
 import OverdueWorkspace from '../components/OverdueWorkspace';
+import ChecklistPanel from '../components/ChecklistPanel';
+import ChecklistWarningModal from '../components/ChecklistWarningModal';
 import { isOverdue } from '../utils/dunning';
+import { CHECKLIST_ITEMS, unconfirmedCount } from '../utils/checklist';
 
 const statusLabels: Record<DealStatus, string> = {
   REVIEW: '확인 필요', CONFIRMED: '확정', IN_PROGRESS: '진행 중', COMPLETED: '작업 완료', PAID: '입금 완료',
@@ -36,6 +39,7 @@ export default function DealsPage() {
   const [notice, setNotice] = useState<ReactNode | null>(null);
   const expandedPipelineId = Number(searchParams.get('deal')) || null;
   const [dunningDeal, setDunningDeal] = useState<Deal | null>(null);
+  const [confirmWarningDeal, setConfirmWarningDeal] = useState<Deal | null>(null);
 
   const load = () => fetchDeals().then(setDeals).catch(() => setError('거래 목록을 불러오지 못했습니다.'));
   useEffect(() => {
@@ -186,6 +190,8 @@ export default function DealsPage() {
   return (
     <>
       {dunningDeal && <DunningModal deal={dunningDeal} onClose={() => setDunningDeal(null)} />}
+      {confirmWarningDeal && <ChecklistWarningModal deal={confirmWarningDeal} onCancel={() => setConfirmWarningDeal(null)}
+        onProceed={() => { void changeStatus(confirmWarningDeal.id, 'CONFIRMED'); setConfirmWarningDeal(null); }} />}
       <header className="page-header"><div><p className="eyebrow">DEAL PIPELINE</p><h1 className="page-title">거래 관리</h1><p className="page-description">제안부터 입금까지 거래의 현재 위치와 중요한 조건을 한눈에 확인하세요.</p></div><div className="page-actions"><div className="view-toggle"><button className={`view-toggle-btn${view === 'pipeline' ? ' active' : ''}`} onClick={() => updatePageState({ view: null, deal: null, edit: null })}>파이프라인</button><button className={`view-toggle-btn${view === 'list' ? ' active' : ''}`} onClick={() => updatePageState({ view: 'list', deal: null })}>목록</button></div><Link className="btn btn-primary" to="/proposals">＋ 새 제안 분석</Link></div></header>
       {overdue.length > 0 && <OverdueWorkspace deals={overdue} />}
       <section className="grid-3" style={{ marginBottom: 24 }}><div className="card metric-card"><div className="metric-label">전체 거래</div><div className="metric-value">{deals.length}건</div><div className="metric-note">확인 대기 포함</div></div><div className="card metric-card"><div className="metric-label">확정 거래 금액</div><div className="metric-value">{total.toLocaleString()}원</div><div className="metric-note">확인 완료된 거래</div></div><div className="card metric-card"><div className="metric-label">입금 완료</div><div className="metric-value">{paid.toLocaleString()}원</div><div className="metric-note">실제 수령 기준</div></div></section>
@@ -236,15 +242,22 @@ export default function DealsPage() {
                     <div key={deal.id} className={`pipeline-card${expandedPipelineId === deal.id ? ' pipeline-card-expanded' : ''}`} onClick={() => updatePageState({ deal: expandedPipelineId === deal.id ? null : String(deal.id) })}>
                       <div className="pipeline-card-top"><div className="pipeline-card-client">{deal.client ?? '거래처 확인 필요'}</div><div className="pipeline-card-amount">{deal.amount == null ? '금액 확인' : `${deal.amount.toLocaleString()}원`}</div></div>
                       <span className="pipeline-card-type">{deal.dealType || statusMeta[status].hint}</span>
+                      {status === 'REVIEW' && <span className={`badge ${unconfirmedCount(deal) > 0 ? 'badge-review' : 'badge-saved'}`} style={{ marginTop: 6 }}>조건 확인 {CHECKLIST_ITEMS.length - unconfirmedCount(deal)}/{CHECKLIST_ITEMS.length}</span>}
                       <div className="pipeline-card-schedule">
                         <div><span>초안</span><strong>{deal.draftDueDate ?? '-'}</strong></div>
                         <div><span>게시</span><strong>{deal.publishDueDate ?? '-'}</strong></div>
                         {(deal.paymentDueDate || status === 'PAID') && <div><span>입금</span><strong>{status === 'PAID' && deal.paidAt ? deal.paidAt.slice(0, 10) : deal.paymentDueDate ?? '-'}</strong></div>}
                       </div>
-                      {statusMeta[status].next && <button className="pipeline-next-button" type="button" onClick={(event) => { event.stopPropagation(); void changeStatus(deal.id, statusMeta[status].next!); }}>{statusMeta[status].action}<span>→</span></button>}
+                      {statusMeta[status].next && <button className="pipeline-next-button" type="button" onClick={(event) => {
+                        event.stopPropagation();
+                        const next = statusMeta[status].next!;
+                        if (status === 'REVIEW' && next === 'CONFIRMED' && unconfirmedCount(deal) > 0) setConfirmWarningDeal(deal);
+                        else void changeStatus(deal.id, next);
+                      }}>{statusMeta[status].action}<span>→</span></button>}
                       {expandedPipelineId === deal.id && (
                         <div className="pipeline-card-actions" onClick={(e) => e.stopPropagation()}>
                           <select className="pipeline-card-select" aria-label="거래 단계 직접 변경" value={deal.status} onChange={(e) => changeStatus(deal.id, e.target.value as DealStatus)}>{Object.entries(statusLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+                          <ChecklistPanel deal={deal} onUpdate={(updated) => setDeals((items) => items.map((item) => item.id === updated.id ? updated : item))} />
                           {deal.notionPageUrl && <a className="btn btn-secondary btn-sm" href={deal.notionPageUrl} target="_blank" rel="noreferrer">Notion에서 열기</a>}
                           <button className="btn btn-secondary btn-sm" onClick={() => void sendToNotion(deal.id)} disabled={!notion?.configured || deal.status === 'REVIEW' || notionBusy !== null}>
                             {notionBusy === deal.id ? '내보내는 중…' : deal.notionPageUrl ? '↻ Notion 갱신' : 'Notion으로 보내기'}
