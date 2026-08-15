@@ -193,7 +193,7 @@ export default function DealsPage() {
               {notion?.connected ? <a className="badge badge-saved" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer">● Notion · {notion.workspaceName || '워크스페이스'} 연결됨 ↗</a> : <span className="integration-status-off">연결 전</span>}
             </div>
             <div className="integration-preview" aria-hidden="true">
-              <span className="integration-preview-icon">▦</span><div><b>Propaid 거래 관리</b><small>거래처 · 상태 · 금액 · 핵심 일정</small></div><span className="integration-preview-arrow">→</span>
+              <span className="integration-preview-icon">▦</span><div><b>ProPaid 거래 관리</b><small>거래처 · 상태 · 금액 · 핵심 일정</small></div><span className="integration-preview-arrow">→</span>
             </div>
             <div className="integration-flow"><span>거래 확인</span><i>→</i><span>직접 내보내기</span><i>→</i><span>Notion 관리</span></div>
             <div className="integration-actions">{notion?.connected ? <><div className="action-row">{!notion.configured && <button className="btn btn-primary" onClick={() => void createNotionWorkspace()} disabled={notionBusy !== null}>{notionBusy === 'setup' ? '만드는 중…' : 'Propaid 공간 만들기'}</button>}<a className="btn btn-secondary btn-sm" href={notion.rootPageUrl ?? 'https://notion.so'} target="_blank" rel="noreferrer">Notion에서 열기</a><button className="btn btn-ghost btn-sm" onClick={() => void stopNotion()} disabled={notionBusy !== null}>{notionBusy === 'disconnect' ? '해제 중…' : '연결 해제'}</button></div></> : <button className="btn btn-primary" onClick={() => void startNotionConnect()} disabled={notionBusy !== null}>{notionBusy === 'connect' ? '연결 중…' : 'Notion 연결'}</button>}</div>
