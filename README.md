@@ -100,10 +100,13 @@ Worker 단독 개발 시 프론트의 `frontend/.env.local`에 `VITE_API_BASE_UR
 | `APP_ORIGIN` | `http://localhost:5173` | 허용할 프론트엔드 Origin, 쉼표로 복수 지정 가능 |
 | `VITE_API_BASE_URL` | `/api` | 프론트의 API 기본 주소 |
 | `ADMIN_TOKEN` | 없음 | `/api/admin/backups/*` 백업 조회 API 인증 토큰(선택, 없으면 해당 API 비활성화) |
+| `ALERT_WEBHOOK_URL` | 없음 | 장애 알림을 보낼 Slack/Discord Incoming Webhook URL(선택, 없으면 알림 전송을 건너뜀) |
 
 운영 D1 생성 후 `worker/wrangler.jsonc`의 `database_id`를 실제 ID로 교체합니다. R2에는 `propaid-evidence`(증빙 파일)와 `propaid-backups`(일일 D1 백업) 두 버킷이 필요합니다. 비밀값은 저장소에 커밋하지 않습니다. `ANTHROPIC_API_KEY`가 없거나 AI 호출이 실패하면 규칙 기반 분석기가 계속 동작합니다.
 
 데이터 백업·복구 절차(Time Travel, 일일 자동 백업, 마이그레이션 전 백업, 월간 복구 훈련)는 [docs/BACKUP_AND_RECOVERY.md](docs/BACKUP_AND_RECOVERY.md)를 참고하세요.
+
+운영 지표 수집과 장애 알림(어떤 지표를 어디서 확인하는지, 알림이 오는 경우와 오지 않는 경우)은 [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)를 참고하세요.
 
 `main` 브랜치에 push하면 Cloudflare Workers Builds가 `worker` 디렉터리를 기준으로 프론트엔드와 Worker를 자동 배포합니다.
 

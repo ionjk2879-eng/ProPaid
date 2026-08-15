@@ -11,3 +11,4 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 # GOOGLE_REDIRECT_URI=http://localhost:8787/api/integrations/google/callback
 # GOOGLE_LOGIN_REDIRECT_URI=http://localhost:8787/api/auth/google/callback
 # ADMIN_TOKEN=replace-with-a-long-random-admin-token
+# ALERT_WEBHOOK_URL=https://hooks.slack.com/services/replace/me (Slack/Discord Incoming Webhook)

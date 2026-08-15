@@ -17,6 +17,8 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_REDIRECT_URI?: string;
   GOOGLE_LOGIN_REDIRECT_URI?: string;
+  METRICS?: AnalyticsEngineDataset;
+  ALERT_WEBHOOK_URL?: string;
 }
 
 export interface UserRow {
@@ -31,4 +33,4 @@ export interface UserRow {
   created_at: string;
 }
 
-export type Variables = { user: UserRow };
+export type Variables = { user: UserRow; requestId: string };

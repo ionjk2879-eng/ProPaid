@@ -7,11 +7,25 @@ import { createToken, hashPassword, randomToken, verifyToken } from './security'
 import { createNotionState, decryptNotionToken, encryptNotionToken, notionAppOrigin, notionHeaders, notionRedirectUri, verifyNotionState } from './notion';
 import { createGoogleLoginState, createGoogleState, decryptGoogleToken, encryptGoogleToken, getGoogleAccessToken, googleAppOrigin, googleLoginRedirectUri, googleRedirectUri, verifyGoogleLoginState, verifyGoogleState, type GoogleConnection } from './google';
 import { DELETION_GRACE_DAYS, purgeUser, scheduledDeletionAt } from './account';
-import { runAccountMaintenance } from './cron';
+import { QUARANTINE_ALERT_THRESHOLD, sendAlert } from './alerts';
+import { runAccountMaintenance, runFailureAlertCheck } from './cron';
+import { logError, type LogContext } from './log';
+import { recordMetric } from './metrics';
 import type { Env, UserRow, Variables } from './types';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 const encoder = new TextEncoder();
+
+// 모든 요청에 request_id를 부여해 로그(Workers Logs)와 오류 응답을 하나로 추적할 수 있게 한다.
+app.use('*', async (c, next) => {
+  c.set('requestId', crypto.randomUUID());
+  await next();
+});
+
+// 로그에 request_id/user_id를 일관되게 붙이기 위한 헬퍼. user는 인증 미들웨어 실행 전이면 비어 있다.
+function reqCtx(c: AppContext): LogContext {
+  return { requestId: c.get('requestId'), userId: c.get('user')?.id };
+}
 
 app.use('*', async (c, next) => cors({
   origin: c.env.APP_ORIGIN.split(',').map((value) => value.trim()),
@@ -19,6 +33,19 @@ app.use('*', async (c, next) => cors({
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   exposeHeaders: ['Content-Disposition'],
 })(c, next));
+
+// API 오류율·응답 시간을 수집한다. 인증 미들웨어보다 먼저 등록해 그 처리 시간까지 포함하고,
+// c.get('user')는 next() 이후 하위 미들웨어가 채워둔 값을 그대로 읽는다.
+app.use('/api/*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  const user = c.get('user');
+  recordMetric(c.env, 'api_request', {
+    blobs: [c.req.path, c.req.method, c.res.status],
+    doubles: [Date.now() - start, c.res.status >= 400 ? 1 : 0],
+    userId: user?.id,
+  });
+});
 
 app.use('/api/*', async (c, next) => {
   if (c.req.path.startsWith('/api/auth/') || c.req.path.startsWith('/api/admin/') || c.req.path === '/api/health' || c.req.path === '/api/webhooks/resend' || c.req.path === '/api/integrations/notion/callback' || c.req.path === '/api/integrations/google/callback' || c.req.method === 'OPTIONS') return next();
@@ -61,8 +88,11 @@ app.get('/api/admin/backups/:date/:table', async (c) => {
 });
 
 app.onError((error, c) => {
-  console.error(error);
   const message = error instanceof Error ? error.message : '요청을 처리하지 못했습니다.';
+  logError('요청 처리 중 오류', reqCtx(c as AppContext), error, { path: c.req.path, method: c.req.method });
+  if (/SQLITE_|D1_ERROR|database is locked|no such table|no such column|UNIQUE constraint/i.test(message)) {
+    recordMetric(c.env, 'd1_error', { blobs: [c.req.path, message.slice(0, 100)] });
+  }
   return c.json({ message }, message.includes('찾을 수') ? 404 : 400);
 });
 
@@ -148,7 +178,7 @@ app.get('/api/auth/google/callback', async (c) => {
     const accessToken = await createToken(user.id, c.env.JWT_SECRET, user.token_version);
     return c.redirect(`${origin}/auth/google/callback#access_token=${encodeURIComponent(accessToken)}&nickname=${encodeURIComponent(user.nickname)}${restored ? '&restored=1' : ''}`);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : 'Google 로그인 처리 실패');
+    logError('Google 로그인 처리 실패', { requestId: c.get('requestId') }, error);
     return loginError('error');
   }
 });
@@ -221,7 +251,7 @@ app.post('/api/account/delete', async (c) => {
   const user = getUser(c as AppContext);
   const input = await body<{ immediate?: boolean }>(c as AppContext).catch(() => ({ immediate: false }));
   if (input.immediate) {
-    await purgeUser(c.env, user.id);
+    await purgeUser(c.env, user.id, reqCtx(c as AppContext));
     return c.json({ status: 'deleted' });
   }
   const scheduledAt = scheduledDeletionAt();
@@ -284,7 +314,7 @@ app.get('/api/integrations/notion/callback', async (c) => {
         token.workspace_id, token.workspace_name ?? null, token.bot_id, token.duplicated_template_id ?? null).run();
     return c.redirect(`${origin}/deals?notion=connected`);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : 'Notion OAuth 처리 실패');
+    logError('Notion OAuth 처리 실패', { requestId: c.get('requestId'), userId }, error);
     return c.redirect(`${origin}/deals?notion=error`);
   }
 });
@@ -422,7 +452,7 @@ app.get('/api/integrations/google/callback', async (c) => {
         expiry, userInfo.email ?? null).run();
     return c.redirect(`${origin}/deals?google=connected`);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : 'Google OAuth 처리 실패');
+    logError('Google OAuth 처리 실패', { requestId: c.get('requestId'), userId }, error);
     return c.redirect(`${origin}/deals?google=error`);
   }
 });
@@ -487,6 +517,15 @@ app.post('/api/deals/:id/calendar', async (c) => {
       WHERE id = ? AND user_id = ?`)
     .bind(eventIds.draft, eventIds.publish, eventIds.payment, succeeded, status, errorSummary, dealId, user.id).run();
   const updated = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ? AND user_id = ?').bind(dealId, user.id).first<Record<string, unknown>>();
+  recordMetric(c.env, 'calendar_sync', { blobs: [failures.length ? 'failed' : 'success'], doubles: [succeeded, failures.length], userId: user.id });
+  if (failures.length) {
+    const attempts = Number((updated as { calendar_sync_attempts?: number } | null)?.calendar_sync_attempts ?? 0);
+    if (attempts === QUARANTINE_ALERT_THRESHOLD) {
+      c.executionCtx.waitUntil(sendAlert(c.env, 'Calendar 동기화 반복 실패',
+        `거래 #${dealId} (사용자 ${user.id})의 Calendar 동기화가 ${QUARANTINE_ALERT_THRESHOLD}회 연속 실패했습니다: ${errorSummary}`,
+        reqCtx(c as AppContext)));
+    }
+  }
   if (failures.length && !succeeded) return c.json({ message: errorSummary || 'Calendar 일정 등록에 실패했습니다.', deal: dealResponse(updated!) }, 502);
   return c.json({ count: succeeded, failed: failures.length, deal: dealResponse(updated!) });
 });
@@ -540,7 +579,7 @@ app.post('/api/proposals/preview', async (c) => {
   const input = await body<{ text?: string }>(c as AppContext);
   if (!input.text?.trim()) return c.json({ message: '제안 내용을 입력해주세요.' }, 400);
   if (input.text.length > 20_000) return c.json({ message: '제안 내용은 20,000자 이하여야 합니다.' }, 400);
-  return c.json(await analyzeWithAdapter(input.text, c.env));
+  return c.json(await analyzeWithAdapter(input.text, c.env, getUser(c as AppContext).id));
 });
 
 app.get('/api/deals', async (c) => {
@@ -597,7 +636,7 @@ app.delete('/api/expenses/:id', async (c) => {
   if (!result.meta.changes) return c.json({ message: '비용 내역을 찾을 수 없습니다.' }, 404);
   if (expense?.evidence_object_key && c.env.EVIDENCE_BUCKET) {
     try { await c.env.EVIDENCE_BUCKET.delete(expense.evidence_object_key); }
-    catch { console.error('삭제된 비용의 R2 증빙 정리에 실패했습니다.'); }
+    catch (error) { logError('삭제된 비용의 R2 증빙 정리에 실패했습니다.', reqCtx(c as AppContext), error); }
   }
   return c.body(null, 204);
 });
@@ -707,6 +746,13 @@ app.post('/api/deals/:id/notion', async (c) => {
     const detail = String([page.message, page.code].filter(Boolean).join(' / ') || `Notion 페이지 ${existingPageId ? '갱신' : '생성'} 실패 (${response.status})`);
     await c.env.DB.prepare(`UPDATE deals SET notion_export_status = 'FAILED', notion_export_error = ?, notion_export_attempts = notion_export_attempts + 1 WHERE id = ? AND user_id = ?`)
       .bind(detail.slice(0, 500), id, user.id).run();
+    recordMetric(c.env, 'notion_export', { blobs: ['failed'], userId: user.id });
+    const attempts = await c.env.DB.prepare('SELECT notion_export_attempts FROM deals WHERE id = ? AND user_id = ?').bind(id, user.id).first<{ notion_export_attempts: number }>();
+    if (attempts?.notion_export_attempts === QUARANTINE_ALERT_THRESHOLD) {
+      c.executionCtx.waitUntil(sendAlert(c.env, 'Notion 내보내기 반복 실패',
+        `거래 #${id} (사용자 ${user.id})의 Notion 내보내기가 ${QUARANTINE_ALERT_THRESHOLD}회 연속 실패했습니다: ${detail}`,
+        reqCtx(c as AppContext)));
+    }
     return c.json({ message: detail }, 400);
   }
   const pageId = String(page.id);
@@ -714,6 +760,7 @@ app.post('/api/deals/:id/notion', async (c) => {
   await c.env.DB.prepare(`UPDATE deals SET notion_page_id = ?, notion_page_url = ?, notion_exported_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
       notion_export_status = 'IDLE', notion_export_error = NULL, notion_export_attempts = notion_export_attempts + 1 WHERE id = ? AND user_id = ?`)
     .bind(pageId, pageUrl, id, user.id).run();
+  recordMetric(c.env, 'notion_export', { blobs: ['success'], userId: user.id });
   const updated = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ? AND user_id = ?').bind(id, user.id).first<Record<string, unknown>>();
   return c.json(dealResponse(updated!));
 });
@@ -732,14 +779,21 @@ app.put('/api/expenses/:id/evidence', async (c) => {
   if (!allowed.includes(file.type)) return c.json({ message: 'PDF, JPG, PNG, WEBP 증빙만 업로드할 수 있습니다.' }, 400);
   if (file.size <= 0 || file.size > 10 * 1024 * 1024) return c.json({ message: '증빙 파일은 10MB 이하여야 합니다.' }, 400);
   const objectKey = `users/${user.id}/expenses/${expenseId}/${crypto.randomUUID()}`;
-  await c.env.EVIDENCE_BUCKET.put(objectKey, file.stream(), {
-    httpMetadata: { contentType: file.type }, customMetadata: { userId: String(user.id), expenseId: String(expenseId) },
-  });
+  try {
+    await c.env.EVIDENCE_BUCKET.put(objectKey, file.stream(), {
+      httpMetadata: { contentType: file.type }, customMetadata: { userId: String(user.id), expenseId: String(expenseId) },
+    });
+  } catch (error) {
+    recordMetric(c.env, 'r2_upload', { blobs: ['failed'], userId: user.id });
+    logError('R2 증빙 업로드 실패', reqCtx(c as AppContext), error);
+    return c.json({ message: '증빙 파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.' }, 502);
+  }
+  recordMetric(c.env, 'r2_upload', { blobs: ['success'], userId: user.id });
   await c.env.DB.prepare(`UPDATE expenses SET evidence_object_key = ?, evidence_file_name = ?, evidence_content_type = ?, evidence_size = ?, evidence_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`)
     .bind(objectKey, file.name.slice(0, 240), file.type, file.size, expenseId, user.id).run();
   if (expense.evidence_object_key) {
     try { await c.env.EVIDENCE_BUCKET.delete(expense.evidence_object_key); }
-    catch { console.error('교체된 이전 R2 증빙 정리에 실패했습니다.'); }
+    catch (error) { logError('교체된 이전 R2 증빙 정리에 실패했습니다.', reqCtx(c as AppContext), error); }
   }
   const row = await c.env.DB.prepare(`SELECT e.*, d.client AS deal_client FROM expenses e LEFT JOIN deals d ON d.id = e.deal_id WHERE e.id = ? AND e.user_id = ?`).bind(expenseId, user.id).first<Record<string, unknown>>();
   return c.json(expenseResponse(row!));
@@ -812,7 +866,7 @@ app.post('/api/inbox/messages/:id/retry', async (c) => {
   if (!row) return c.json({ message: '수신 메일을 찾을 수 없습니다.' }, 404);
   if (row.status !== 'FAILED') return c.json({ message: '실패 상태의 메일만 재시도할 수 있습니다.' }, 409);
   try {
-    const processed = await receiveEmail(row.resend_email_id, c.env);
+    const processed = await receiveEmail(row.resend_email_id, c.env, user.id);
     await c.env.DB.prepare(`UPDATE inbound_emails SET sender = ?, subject = ?, text_body = ?, analysis = ?, status = 'REVIEW', error_message = NULL, attempt_count = attempt_count + 1, last_attempt_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`)
       .bind(processed.sender, processed.subject, processed.text, JSON.stringify(processed.analysis), row.id, user.id).run();
     return c.json({ received: true });
@@ -896,32 +950,46 @@ app.post('/api/webhooks/resend', async (c) => {
   if (event.type !== 'email.received') return c.json({ received: true });
   const svixId = c.req.header('svix-id')!;
   const duplicate = await c.env.DB.prepare('SELECT id FROM inbound_emails WHERE svix_id = ? OR resend_email_id = ?').bind(svixId, event.data.email_id).first();
-  if (duplicate) return c.json({ received: true, duplicate: true });
+  if (duplicate) {
+    recordMetric(c.env, 'webhook_resend', { blobs: ['duplicate'] });
+    return c.json({ received: true, duplicate: true });
+  }
   const recipient = event.data.to?.find((value) => value.toLowerCase().endsWith(`@${c.env.RESEND_RECEIVING_DOMAIN.toLowerCase()}`));
   const token = recipient?.split('@')[0].replace(/^inbox-/, '');
   const user = token ? await c.env.DB.prepare('SELECT id FROM users WHERE inbox_token = ?').bind(token).first<{ id: number }>() : null;
-  if (!user || !recipient) return c.json({ received: true, ignored: 'unknown_recipient' });
+  if (!user || !recipient) {
+    recordMetric(c.env, 'webhook_resend', { blobs: ['ignored_unknown_recipient'] });
+    return c.json({ received: true, ignored: 'unknown_recipient' });
+  }
   const isUniqueViolation = (error: unknown) => error instanceof Error && /unique/i.test(error.message);
   try {
-    const processed = await receiveEmail(event.data.email_id, c.env);
+    const processed = await receiveEmail(event.data.email_id, c.env, user.id);
     await c.env.DB.prepare(`INSERT INTO inbound_emails
       (user_id, resend_email_id, svix_id, sender, recipient, subject, text_body, analysis, last_attempt_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
       .bind(user.id, event.data.email_id, svixId, processed.sender ?? event.data.from ?? null, recipient,
         processed.subject ?? event.data.subject ?? null, processed.text, JSON.stringify(processed.analysis)).run();
+    recordMetric(c.env, 'webhook_resend', { blobs: ['received'], userId: user.id });
     return c.json({ received: true });
   } catch (error) {
     // 거의 동시에 도착한 같은 웹훅이 중복 검사를 함께 통과했을 수 있으므로, 삽입 단계의 유니크 제약 위반도 중복으로 처리한다.
-    if (isUniqueViolation(error)) return c.json({ received: true, duplicate: true });
+    if (isUniqueViolation(error)) {
+      recordMetric(c.env, 'webhook_resend', { blobs: ['duplicate'] });
+      return c.json({ received: true, duplicate: true });
+    }
     try {
       await c.env.DB.prepare(`INSERT INTO inbound_emails
         (user_id, resend_email_id, svix_id, sender, recipient, subject, text_body, analysis, status, error_message, last_attempt_at)
         VALUES (?, ?, ?, ?, ?, ?, '', ?, 'FAILED', ?, CURRENT_TIMESTAMP)`)
         .bind(user.id, event.data.email_id, svixId, event.data.from ?? null, recipient, event.data.subject ?? null,
           JSON.stringify(analyzeProposal('')), safeInboundError(error)).run();
+      recordMetric(c.env, 'webhook_resend', { blobs: ['failed'], userId: user.id });
       return c.json({ received: true, status: 'FAILED' }, 202);
     } catch (insertError) {
-      if (isUniqueViolation(insertError)) return c.json({ received: true, duplicate: true });
+      if (isUniqueViolation(insertError)) {
+        recordMetric(c.env, 'webhook_resend', { blobs: ['duplicate'] });
+        return c.json({ received: true, duplicate: true });
+      }
       throw insertError;
     }
   }
@@ -1007,7 +1075,7 @@ function stripHtml(html: string): string {
     .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-async function receiveEmail(emailId: string, env: Env) {
+async function receiveEmail(emailId: string, env: Env, userId?: number) {
   const response = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`, {
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'User-Agent': 'propaid-worker/1.0' },
   });
@@ -1015,7 +1083,7 @@ async function receiveEmail(emailId: string, env: Env) {
   const email = await response.json<{ text?: string | null; html?: string | null; from?: string; subject?: string }>();
   const text = email.text?.trim() || stripHtml(email.html ?? '');
   if (!text) throw new Error('메일 본문이 비어 있습니다.');
-  return { sender: email.from ?? null, subject: email.subject ?? null, text, analysis: await analyzeWithAdapter(text, env) };
+  return { sender: email.from ?? null, subject: email.subject ?? null, text, analysis: await analyzeWithAdapter(text, env, userId) };
 }
 
 function safeInboundError(error: unknown): string {
@@ -1040,7 +1108,12 @@ async function verifyWebhook(payload: string, headers: Headers, secret: string):
 
 export default {
   fetch: app.fetch,
-  scheduled: async (_event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(runAccountMaintenance(env));
+  scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+    const jobId = crypto.randomUUID();
+    if (event.cron === '0 * * * *') {
+      ctx.waitUntil(runFailureAlertCheck(env, jobId));
+      return;
+    }
+    ctx.waitUntil(runAccountMaintenance(env, jobId));
   },
 };

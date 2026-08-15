@@ -1,3 +1,4 @@
+import { logError, type LogContext } from './log';
 import type { Env } from './types';
 
 export const BACKUP_RETENTION_DAYS = 90;
@@ -16,7 +17,7 @@ async function listUserTables(env: Env): Promise<string[]> {
  * both a dated key and a fixed `latest` key, then prunes exports older than the retention window.
  * This is deliberately plain JSON (no compression) so a human can restore it without extra tooling.
  */
-export async function runDailyBackup(env: Env): Promise<void> {
+export async function runDailyBackup(env: Env, context: LogContext = {}): Promise<void> {
   if (!env.BACKUP_BUCKET) return; // 백업 버킷이 없는 환경(로컬 개발 등)에서는 건너뛴다.
   const tables = await listUserTables(env);
   const exportedAt = new Date().toISOString();
@@ -41,7 +42,7 @@ export async function runDailyBackup(env: Env): Promise<void> {
     const match = object.key.match(/^d1\/(\d{4}-\d{2}-\d{2})\//);
     if (match && match[1] < cutoff) {
       try { await env.BACKUP_BUCKET.delete(object.key); }
-      catch { console.error(`오래된 백업 삭제 실패: ${object.key}`); }
+      catch (error) { logError('오래된 백업 삭제 실패', context, error, { key: object.key }); }
     }
   }
 }
