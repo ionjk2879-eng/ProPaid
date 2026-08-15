@@ -1,0 +1,30 @@
+name: Scheduled maintenance
+
+# Cloudflare Workers Free 플랜은 계정 전체에서 크론 트리거를 5개까지만 허용하는데,
+# 이 계정의 다른 프로젝트가 이미 그 한도를 다 쓰고 있어 ProPaid 쪽에서는 Cloudflare
+# 네이티브 크론을 등록할 수 없다. 대신 GitHub Actions 스케줄로 관리자 전용 HTTP
+# 엔드포인트를 호출해 같은 역할(일일 계정 정리·백업, 매시간 실패 알림 점검)을 한다.
+on:
+  schedule:
+    - cron: '0 18 * * *' # 매일 18:00 UTC — 계정 정리·백업 (docs/BACKUP_AND_RECOVERY.md, docs/SECURITY.md 참고)
+    - cron: '0 * * * *' # 매시간 — 실패 알림 점검 (docs/OBSERVABILITY.md 참고)
+  workflow_dispatch: {} # Actions 탭에서 수동 실행(테스트용). 두 작업을 모두 실행한다.
+
+jobs:
+  run-maintenance:
+    if: github.event.schedule == '0 18 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger daily account maintenance and backup
+        run: |
+          curl -fsS -X POST "https://propaid-api.ionjk2879.workers.dev/api/admin/run-maintenance" \
+            -H "X-Admin-Token: ${{ secrets.PROPAID_ADMIN_TOKEN }}"
+
+  run-failure-alert-check:
+    if: github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger hourly failure alert check
+        run: |
+          curl -fsS -X POST "https://propaid-api.ionjk2879.workers.dev/api/admin/run-failure-alert-check" \
+            -H "X-Admin-Token: ${{ secrets.PROPAID_ADMIN_TOKEN }}"

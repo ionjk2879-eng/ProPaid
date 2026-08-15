@@ -12,7 +12,7 @@ Cloudflare D1의 Time Travel은 "자동으로 백업된다"는 안심을 주지�
 | 계층 | 방식 | 보관 기간 | 자동/수동 |
 | --- | --- | --- | --- |
 | 1차 방어선 | Cloudflare D1 Time Travel | 무료 7일 / 유료 30일 | 자동(Cloudflare 관리) |
-| 2차 방어선 | 매일 D1 → R2 JSON 내보내기 | 90일 | 자동(Cron) |
+| 2차 방어선 | 매일 D1 → R2 JSON 내보내기 | 90일 | 자동(GitHub Actions 스케줄) |
 | 3차 방어선 | 마이그레이션 직전 SQL 내보내기 | 사람이 보관 | 자동 트리거(수동 실행 시) |
 | 검증 | 월간 복구 훈련 스크립트 | — | 자동화 가능(권장) |
 | 검증 | Time Travel 실복구 훈련 | — | 수동(분기 1회 권장) |
@@ -58,7 +58,7 @@ npx wrangler d1 time-travel restore propaid --remote --bookmark=<BOOKMARK>
 
 ## 2. 매일 D1 → R2 자체 백업 (자동)
 
-`worker/src/backup.ts`의 `runDailyBackup()`이 기존 일일 Cron(`worker/src/cron.ts`, 매일 UTC 18:00 = KST 03:00)에 포함되어 실행됩니다.
+`worker/src/backup.ts`의 `runDailyBackup()`이 `runAccountMaintenance()`(`worker/src/cron.ts`)에 포함되어 실행됩니다. 트리거는 Cloudflare 네이티브 크론이 아니라 **GitHub Actions 스케줄**(`.github/workflows/scheduled-maintenance.yml`, 매일 UTC 18:00 = KST 03:00)이 관리자 전용 엔드포인트 `POST /api/admin/run-maintenance`를 호출하는 방식입니다 — 이 Cloudflare 계정의 다른 프로젝트가 Workers Free 플랜의 계정당 크론 트리거 한도(5개)를 이미 다 쓰고 있어 ProPaid는 자체 크론을 등록할 수 없기 때문입니다(자세한 배경은 [SECURITY.md](SECURITY.md) 참고).
 
 - `sqlite_master`를 조회해 **모든 사용자 테이블을 자동으로 찾아** 내보냅니다. 새 마이그레이션으로 테이블이 추가돼도 코드 수정 없이 함께 백업됩니다.
 - 각 테이블을 순수 JSON 배열로 직렬화해 `propaid-backups` R2 버킷에 저장합니다.
@@ -207,6 +207,7 @@ npm run restore:drill
 
 | 이름 | 위치 | 용도 |
 | --- | --- | --- |
-| `ADMIN_TOKEN` | `wrangler secret put ADMIN_TOKEN` (운영) / `worker/.dev.vars` (로컬) | `/api/admin/backups/*` 조회 인증, 복구 훈련 스크립트가 사용 |
+| `ADMIN_TOKEN` | `wrangler secret put ADMIN_TOKEN` (운영) / `worker/.dev.vars` (로컬) | `/api/admin/backups/*` 조회 인증, 복구 훈련 스크립트·GitHub Actions 스케줄이 사용 |
+| `PROPAID_ADMIN_TOKEN` (GitHub Actions 저장소 시크릿) | GitHub 저장소 Settings → Secrets and variables → Actions | `ADMIN_TOKEN`과 동일한 값. `.github/workflows/scheduled-maintenance.yml`이 `/api/admin/run-maintenance`·`/api/admin/run-failure-alert-check`를 호출할 때 사용 — 값이 다르면 스케줄 작업이 401로 실패한다 |
 | `propaid-backups` R2 버킷 | `wrangler r2 bucket create propaid-backups` | 일일 D1 백업 저장 위치 |
 | `worker/backups/*.sql` | 로컬 디스크(gitignore됨) | 마이그레이션 직전 수동 백업 산출물 — 로컬 밖에도 1부 보관 권장 |

@@ -41,11 +41,8 @@
     { "name": "LOGIN_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
     { "name": "ANALYSIS_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
     { "name": "MAIL_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
-  ],
-  // Workers Free 플랜은 계정 전체에서 크론 트리거를 5개까지만 허용한다. 매시간 실행되는
-  // 알림 점검과 매일 18:00(UTC) 실행되는 계정 정리를 각각 별도 크론으로 등록하면 이 한도에
-  // 쉽게 걸리므로, 트리거는 시간당 1개만 등록하고 scheduled 핸들러 안에서 시각을 보고 분기한다.
-  "triggers": {
-    "crons": ["0 * * * *"]
-  }
+  ]
+  // Cloudflare 크론 트리거는 쓰지 않는다 — Workers Free 플랜은 계정 전체(이 계정의 다른 프로젝트 포함)에서
+  // 크론 트리거를 5개까지만 허용하는데 다른 프로젝트가 이미 다 쓰고 있다. 대신 .github/workflows/scheduled-maintenance.yml이
+  // GitHub Actions 스케줄로 /api/admin/run-maintenance, /api/admin/run-failure-alert-check를 호출한다.
 }

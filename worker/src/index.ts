@@ -94,6 +94,21 @@ app.get('/api/admin/backups/:date/:table', async (c) => {
   return new Response(object.body, { headers: { 'Content-Type': 'application/json' } });
 });
 
+// 이 계정의 Workers Free 플랜 크론 트리거 한도(계정 전체 5개)를 다른 프로젝트가 이미 다 쓰고 있어
+// Cloudflare 네이티브 크론을 쓸 수 없다. 대신 .github/workflows/scheduled-maintenance.yml의
+// GitHub Actions 스케줄이 이 두 엔드포인트를 호출해 같은 역할을 한다.
+app.post('/api/admin/run-maintenance', async (c) => {
+  const jobId = crypto.randomUUID();
+  await runAccountMaintenance(c.env, jobId);
+  return c.json({ status: 'ok', jobId });
+});
+
+app.post('/api/admin/run-failure-alert-check', async (c) => {
+  const jobId = crypto.randomUUID();
+  await runFailureAlertCheck(c.env, jobId);
+  return c.json({ status: 'ok', jobId });
+});
+
 app.onError((error, c) => {
   const message = error instanceof Error ? error.message : '요청을 처리하지 못했습니다.';
   logError('요청 처리 중 오류', reqCtx(c as AppContext), error, { path: c.req.path, method: c.req.method });
@@ -1145,15 +1160,8 @@ async function verifyWebhook(payload: string, headers: Headers, secret: string):
   } catch { return false; }
 }
 
+// Cloudflare 크론 트리거 대신 GitHub Actions 스케줄(.github/workflows/scheduled-maintenance.yml)이
+// /api/admin/run-maintenance, /api/admin/run-failure-alert-check를 호출해 이 역할을 대신한다.
 export default {
   fetch: app.fetch,
-  // 크론 트리거는 매시간 하나만 등록되어 있다(Workers Free 플랜의 계정당 5개 제한 때문 — wrangler.jsonc 참고).
-  // 실패 알림 점검은 매시간 실행하고, 계정 정리·백업은 예전과 같은 시각(UTC 18시)에만 실행해 하루 한 번으로 유지한다.
-  scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-    const jobId = crypto.randomUUID();
-    ctx.waitUntil(runFailureAlertCheck(env, jobId));
-    if (new Date(event.scheduledTime).getUTCHours() === 18) {
-      ctx.waitUntil(runAccountMaintenance(env, jobId));
-    }
-  },
 };

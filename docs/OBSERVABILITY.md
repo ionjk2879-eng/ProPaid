@@ -60,16 +60,21 @@ Slack 또는 Discord Incoming Webhook URL을 `ALERT_WEBHOOK_URL` 시크릿으로
 1. **Notion·Calendar 연동 반복 실패** — 즉시 알림. 같은 거래의 내보내기/동기화가 3회 연속 실패한
    순간(`notion_export_attempts`/`calendar_sync_attempts`가 정확히 3이 되는 시점) 한 번만 보냅니다.
    그 이후 계속 실패해도 매번 다시 알리지는 않습니다.
-2. **Resend 수신 메일 처리 실패 급증** — 매시간(`0 * * * *` cron) 최근 1시간 동안 새로 실패한
-   건수가 3건 이상이면 알림을 보냅니다. 새 실패가 없으면 자동으로 조용해집니다(별도 해제 절차 없음).
+2. **Resend 수신 메일 처리 실패 급증** — 매시간 최근 1시간 동안 새로 실패한 건수가 3건 이상이면
+   알림을 보냅니다. 새 실패가 없으면 자동으로 조용해집니다(별도 해제 절차 없음).
+
+매시간 점검은 Cloudflare 네이티브 크론이 아니라 **GitHub Actions 스케줄**(`.github/workflows/scheduled-maintenance.yml`)이
+관리자 전용 엔드포인트 `POST /api/admin/run-failure-alert-check`를 호출하는 방식으로 동작합니다 — 이
+Cloudflare 계정의 다른 프로젝트가 Workers Free 플랜의 계정당 크론 트리거 한도(5개)를 이미 다 쓰고 있어
+ProPaid는 자체 크론을 등록할 수 없기 때문입니다. 자세한 배경은 [SECURITY.md](SECURITY.md)를 참고하세요.
 
 ### 자동 알림이 없는 항목
 
 Claude 분석 실패율, D1 쿼리 오류, R2 업로드 실패, 전체 API 오류율은 위 표대로 **자동 수집**되지만
-현재는 자동 알림이 걸려 있지 않습니다. Analytics Engine에 쌓인 데이터를 Worker의 `scheduled` 핸들러가
-직접 집계하려면 별도의 Cloudflare API 토큰(Analytics Engine 조회 권한)이 필요해서, 이번 1차 구현에서는
-D1에 이미 저장되는 신호(수신 메일 실패, Notion/Calendar 실패)만으로 알림을 구성했습니다. 나머지 항목은
-위 대시보드 SQL로 필요할 때 확인하거나, 이후 요청 시 API 토큰을 추가해 알림 범위를 넓힐 수 있습니다.
+현재는 자동 알림이 걸려 있지 않습니다. Analytics Engine에 쌓인 데이터를 직접 집계하려면 별도의
+Cloudflare API 토큰(Analytics Engine 조회 권한)이 필요해서, 이번 1차 구현에서는 D1에 이미 저장되는
+신호(수신 메일 실패, Notion/Calendar 실패)만으로 알림을 구성했습니다. 나머지 항목은 위 대시보드 SQL로
+필요할 때 확인하거나, 이후 요청 시 API 토큰을 추가해 알림 범위를 넓힐 수 있습니다.
 
 ### 요청 항목 중 해당 없음: 입금 알림 작업 실패
 
@@ -84,6 +89,7 @@ D1에 이미 저장되는 신호(수신 메일 실패, Notion/Calendar 실패)�
 | 변수 | 필수 | 설명 |
 | --- | --- | --- |
 | `ALERT_WEBHOOK_URL` | 아니오 | Slack/Discord Incoming Webhook URL. 없으면 알림 전송을 건너뜀 |
+| `PROPAID_ADMIN_TOKEN` (GitHub Actions 저장소 시크릿) | 예 | `ADMIN_TOKEN`과 동일한 값. 없으면 매시간 실패 알림 점검·매일 계정 정리가 전혀 실행되지 않음(자세한 배경은 [SECURITY.md](SECURITY.md)) |
 
 로컬 개발: `worker/.dev.vars`에 추가. 운영: `wrangler secret put ALERT_WEBHOOK_URL`.
 

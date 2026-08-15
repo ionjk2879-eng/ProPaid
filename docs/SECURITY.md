@@ -82,6 +82,21 @@ Cloudflare Rate Limiting 바인딩(`worker/src/ratelimit.ts`)을 세 가지 목�
 
 `/api/admin/*` 미들웨어에서 모든 접근 시도(성공·실패 모두)를 구조화 로그로 남기도록 했습니다 — `경로`, `메서드`, `클라이언트 IP`, `요청 허용 여부`, `request_id`를 포함합니다. 지난 대화에서 다룬 [운영 로그/Workers Logs](OBSERVABILITY.md) 인프라를 그대로 재사용해, 별도의 D1 감사 테이블 없이 Cloudflare 대시보드에서 검색·보존할 수 있게 했습니다.
 
+### 부록: Cloudflare 네이티브 크론 대신 GitHub Actions를 쓰는 이유
+
+원래는 Cloudflare 크론 트리거(매일 계정 정리·백업, 매시간 실패 알림 점검)를 썼지만, 배포 시 다음 오류로 계속 실패했습니다.
+
+```
+This account has reached the Workers Free limit of 5 cron triggers per account.
+```
+
+Cloudflare API로 계정 전체 크론을 직접 조회해보니, 같은 계정의 다른 프로젝트(`remindue` 4개, `sonett` 1개)가 Workers Free 플랜의 계정당 한도(5개)를 이미 다 쓰고 있어 ProPaid는 자체 크론을 하나도 등록할 수 없는 상태였습니다. 이 저장소와 무관한 다른 프로젝트라 직접 조정하지 않았고, 대신 **Cloudflare 크론 자체를 쓰지 않는 방식**으로 바꿨습니다.
+
+- `POST /api/admin/run-maintenance`, `POST /api/admin/run-failure-alert-check` — 기존 `X-Admin-Token`(`ADMIN_TOKEN`) 인증이 그대로 적용되는 `/api/admin/*` 관리자 엔드포인트로 새로 노출했습니다. 위의 접근 로그 기능도 동일하게 적용됩니다.
+- `.github/workflows/scheduled-maintenance.yml`이 GitHub Actions의 `schedule` 트리거(같은 시각: 매일 UTC 18시, 매시간)로 이 두 엔드포인트를 호출합니다. Actions 탭에서 `workflow_dispatch`로 수동 실행도 가능합니다(테스트용).
+- GitHub 저장소 시크릿 `PROPAID_ADMIN_TOKEN`에 `ADMIN_TOKEN`과 **같은 값**을 등록해야 동작합니다. 값이 다르면 워크플로가 401로 실패합니다.
+- 이 방식은 Cloudflare 계정의 크론 쿼터와 완전히 무관하므로, 다른 프로젝트가 크론을 몇 개를 쓰든 영향받지 않습니다.
+
 ## 11. 운영·개발용 Secret 분리 — 체크리스트(기존 구조가 이미 이 원칙을 따름)
 
 - 로컬 비밀값은 Git에서 제외되는 `worker/.dev.vars`에만 두고, 운영 비밀값은 `wrangler secret put`으로 Cloudflare에 등록합니다(로컬 파일에 존재하지 않음). 이 둘은 물리적으로 다른 저장소입니다.
